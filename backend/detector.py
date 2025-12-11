@@ -1,0 +1,175 @@
+# backend/detector.py
+from datetime import datetime
+import threading
+
+# import the watchdog API
+from backend.model_watchdog import get_cached_model, register_listener
+
+class CycleDetector:
+    """
+    Industrial-grade cycle detector:
+    Idle → Rising → Peak → Falling → Cycle End
+    """
+
+    def __init__(self, threshold=5.0, on_cycle_detected=None):
+        self.threshold = float(threshold)
+        self.on_cycle_detected = on_cycle_detected
+
+        self.model_limits = {
+            "model_id": None,
+            "lower": 0.0,
+            "upper": 100.0
+        }
+
+        self.buffer = []
+        self.in_cycle = False
+        self.peak_value = 0.0
+        self.min_cycle_samples = 8
+
+        # initialize model limits from cache if available
+        self._apply_cached_model(get_cached_model())
+
+    # -------------------------
+    def _apply_cached_model(self, model: dict):
+        """Apply model dict (from cache/watchdog)."""
+        if not model:
+            return
+        try:
+            self.model_limits = {
+                "model_id": model.get("id"),
+                "lower": float(model.get("lower_limit", 0)),
+                "upper": float(model.get("upper_limit", 100))
+            }
+            print(
+                f"📌 Detector Active Model → ID {model.get('id')} | "
+                f"{self.model_limits['lower']}–{self.model_limits['upper']} mm"
+            )
+        except Exception as e:
+            print("⚠ detector: failed to apply cached model:", e)
+
+    # -------------------------
+    def push(self, value: float):
+        value = float(value)
+        self.buffer.append(value)
+
+        # START OF CYCLE — rising above threshold
+        if not self.in_cycle and value > self.threshold:
+            self.in_cycle = True
+            self.peak_value = value
+            return
+
+        # DURING CYCLE
+        if self.in_cycle:
+            if value > self.peak_value:
+                self.peak_value = value
+
+            # END OF CYCLE — drop below threshold
+            if value <= self.threshold:
+                self._finalize_cycle()
+
+    # -------------------------
+    def _finalize_cycle(self):
+        if len(self.buffer) < self.min_cycle_samples:
+            self._reset()
+            return
+
+        lower = self.model_limits["lower"]
+        upper = self.model_limits["upper"]
+
+        result = "PASS" if lower <= self.peak_value <= upper else "FAIL"
+
+        cycle_data = {
+            "timestamp": datetime.now().isoformat(),
+            "peak_height": round(self.peak_value, 2),
+            "pass_fail": result,
+            "model_id": self.model_limits.get("model_id")
+        }
+
+        # Call user callback safely
+        if self.on_cycle_detected:
+            try:
+                print("🔄 DETECTOR CYCLE:", cycle_data)
+                self.on_cycle_detected(cycle_data)
+            except Exception as e:
+                print("⚠ detector: cycle callback error:", e)
+
+        self._reset()
+
+    # -------------------------
+    def _reset(self):
+        self.buffer.clear()
+        self.in_cycle = False
+        self.peak_value = 0.0
+
+    # -------------------------
+    def update_model_limits(self, model: dict):
+        """Listener-compatible callback used by model_watchdog.register_listener."""
+        if not model:
+            return
+        try:
+            # Accept both DB-style keys or direct dict keys
+            self.model_limits = {
+                "model_id": model.get("id"),
+                "lower": float(model.get("lower_limit", model.get("lower", 0))),
+                "upper": float(model.get("upper_limit", model.get("upper", 100)))
+            }
+            print(
+                f"📌 detector:update_model_limits → ID {model.get('id')} | "
+                f"{self.model_limits['lower']}–{self.model_limits['upper']} mm"
+            )
+        except Exception as e:
+            print("⚠ detector: update_model_limits failed:", e)
+
+    # -------------------------
+    def update_threshold(self, value: float):
+        self.threshold = float(value)
+        print("📌 Detector threshold set to:", self.threshold)
+
+
+# -------------------------
+# GLOBAL DETECTOR INSTANCE & helpers
+# -------------------------
+detector = None
+_detector_lock = threading.Lock()
+
+
+def init_detector(on_cycle_detected):
+    """Initialize global detector and register it with the model_watchdog."""
+    global detector
+    with _detector_lock:
+        if detector is None:
+            detector = CycleDetector(on_cycle_detected=on_cycle_detected)
+            # register for automatic updates
+            register_listener(detector.update_model_limits)
+            detector.update_threshold(1.0)  # recommended for simulator
+            print("✅ Detector initialized and listening for model updates.")
+        else:
+            # rebind callback if needed
+            detector.on_cycle_detected = on_cycle_detected
+            print("ℹ Detector already initialized; callback updated.")
+
+
+def push_laser_value(value):
+    if detector:
+        detector.push(value)
+
+
+def reload_active_model():
+    """Force read from cache (useful if you want to re-apply cached model)."""
+    if detector:
+        detector.update_model_limits(get_cached_model())
+        print("🔁 detector: reloaded active model from cache.")
+
+
+def set_active_model(model: dict):
+    """Directly set active model (dict) on detector immediately."""
+    if detector:
+        try:
+            detector.update_model_limits(model)
+        except Exception as e:
+            print("⚠ detector: set_active_model failed:", e)
+
+
+def update_threshold(value):
+    if detector:
+        detector.update_threshold(value)

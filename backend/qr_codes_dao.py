@@ -1,0 +1,48 @@
+# backend/qr_codes_dao.py
+from .db import query
+import os
+import logging
+
+QR_FOLDER = os.path.join(os.path.dirname(__file__), "..", "qr_images")
+
+def ensure_folder():
+    os.makedirs(QR_FOLDER, exist_ok=True)
+
+def save_qr_code(filename: str, qr_text: str) -> int:
+    ensure_folder()
+    return query(
+        "INSERT INTO qr_codes (filename, qr_data) VALUES (%s, %s)",
+        (filename, qr_text)
+    )
+
+def get_qr_code(qr_id: int) -> dict:
+    return query("SELECT * FROM qr_codes WHERE id = %s", (qr_id,), fetch_one=True)
+
+def get_qr_image_path(qr_id: int) -> str:
+    meta = get_qr_code(qr_id)
+    if not meta or not meta["filename"]:
+        return None
+    full_path = os.path.abspath(meta["filename"]) if os.path.isabs(meta["filename"]) \
+        else os.path.join(os.path.dirname(__file__), "..", meta["filename"])
+    return full_path if os.path.exists(full_path) else None
+
+def delete_old_qr_codes(days_old: int = 1) -> int:
+    import time
+    cutoff = int(time.time()) - (days_old * 24 * 3600)
+    rows = query("""
+        SELECT id, filename FROM qr_codes 
+        WHERE created_at < FROM_UNIXTIME(%s)
+    """, (cutoff // 1000,))  # MariaDB uses seconds
+
+    deleted = 0
+    for row in rows:
+        try:
+            if row["filename"]:
+                path = row["filename"] if os.path.isabs(row["filename"]) else os.path.join("..", row["filename"])
+                if os.path.exists(path):
+                    os.remove(path)
+            query("DELETE FROM qr_codes WHERE id = %s", (row["id"],))
+            deleted += 1
+        except Exception as e:
+            logging.warning(f"Failed to delete QR {row['id']}: {e}")
+    return deleted
