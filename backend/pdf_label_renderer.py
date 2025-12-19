@@ -15,7 +15,7 @@ from PySide6.QtCore import QSizeF, QMarginsF
 def render_label_pdf(
     output_path: str,
     label_image_path: str,
-    label_size_mm=(20, 20),
+    label_size_mm=(50.8, 25.4),
     dpi=203,
 ):
     """
