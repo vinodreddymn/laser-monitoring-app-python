@@ -211,5 +211,9 @@ __marimo__/
 qr_images/*
 !.gitkeep
 
+# QR Images
+prints/*
+!.gitkeep
+
 __pycache__/
 *.pyc
