@@ -1,5 +1,3 @@
-# gui/windows/alert_phones_tab.py
-
 import re
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
@@ -9,8 +7,6 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from backend.models_dao import get_models
-
-# ✅ CORRECT DAO IMPORTS (MATCH YOUR BACKEND FILE EXACTLY)
 from backend.alert_phones_dao import (
     get_phones_by_model_id,
     add_phone,
@@ -20,46 +16,58 @@ from backend.alert_phones_dao import (
 
 
 # -----------------------------------------------------
-# Edit/Add Phone Dialog
+# Add / Edit Contact Dialog (Name + Phone)
 # -----------------------------------------------------
 class PhoneEditDialog(QDialog):
-    def __init__(self, parent=None, phone=None):
+    def __init__(self, parent=None, contact=None):
         super().__init__(parent)
-        self.phone = phone
-        self.setWindowTitle("Edit Phone" if phone else "Add Phone Number")
+        self.contact = contact
+        self.setWindowTitle("Edit Contact" if contact else "Add Alert Contact")
         self.setModal(True)
-        self.setup_ui()
+        self._build_ui()
 
-    def setup_ui(self):
+    def _build_ui(self):
         layout = QVBoxLayout(self)
         form = QFormLayout()
 
+        self.name_input = QLineEdit()
         self.phone_input = QLineEdit()
-        if self.phone:
-            self.phone_input.setText(self.phone["phone_number"])
 
+        self.name_input.setPlaceholderText("Person Name")
         self.phone_input.setPlaceholderText("+919876543210")
+
+        if self.contact:
+            self.name_input.setText(self.contact.get("name", ""))
+            self.phone_input.setText(self.contact.get("phone_number", ""))
+
+        form.addRow("Name:", self.name_input)
         form.addRow("Phone Number:", self.phone_input)
+
         layout.addLayout(form)
 
         buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok |
-            QDialogButtonBox.StandardButton.Cancel
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
+
         layout.addWidget(buttons)
 
-    def get_cleaned_phone(self):
-        text = self.phone_input.text().strip()
-        cleaned = re.sub(r"[^0-9+]", "", text)
-        if not cleaned:
-            return None
+    def get_data(self):
+        name = self.name_input.text().strip()
+        phone = self.phone_input.text().strip()
 
-        if not re.match(r"^\+\d{8,15}$", cleaned) and not re.match(r"^\d{10,15}$", cleaned):
-            return None
+        phone = re.sub(r"[^0-9+]", "", phone)
+        if phone and not phone.startswith("+"):
+            phone = "+" + phone
 
-        return cleaned if cleaned.startswith("+") else "+" + cleaned
+        if not name:
+            return None, None, "Name is required"
+
+        if not phone or not re.match(r"^\+\d{8,15}$", phone):
+            return None, None, "Invalid phone number format"
+
+        return name, phone, None
 
 
 # -----------------------------------------------------
@@ -69,179 +77,160 @@ class AlertPhonesTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.current_model_id = None
-        self.phones = []
-        self.setup_ui()
-        self.load_models_combo()
+        self.contacts = []
+        self._build_ui()
+        self._load_models()
 
-    def setup_ui(self):
+    # -------------------------------------------------
+    def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(20)
-        layout.setContentsMargins(30, 30, 30, 30)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 24, 24, 24)
 
         # Header
-        header = QHBoxLayout()
-        header.addWidget(QLabel("<h2 style='color:#1e293b; margin:0;'>Alert Phone Numbers</h2>"))
-        layout.addLayout(header)
+        layout.addWidget(
+            QLabel("<h2 style='margin:0;'>Alert Contacts</h2>")
+        )
 
         # Model selector
-        model_layout = QHBoxLayout()
-        model_layout.addWidget(QLabel("Select Model:"))
+        model_row = QHBoxLayout()
+        model_row.addWidget(QLabel("Model:"))
+
         self.model_combo = QComboBox()
         self.model_combo.setMinimumWidth(300)
-        self.model_combo.currentIndexChanged.connect(self.on_model_changed)
-        model_layout.addWidget(self.model_combo)
-        model_layout.addStretch()
-        layout.addLayout(model_layout)
+        self.model_combo.currentIndexChanged.connect(self._on_model_changed)
 
-        # Phone form
-        phone_form = QHBoxLayout()
-        self.phone_input = QLineEdit()
-        self.phone_input.setPlaceholderText("+919876543210")
-        self.phone_input.returnPressed.connect(self.add_or_update_phone)
+        model_row.addWidget(self.model_combo)
+        model_row.addStretch()
+        layout.addLayout(model_row)
 
-        self.add_btn = QPushButton("Add Phone")
-        self.add_btn.setStyleSheet("background:#10b981; color:white; padding:8px 16px; border-radius:8px;")
-        self.add_btn.clicked.connect(self.add_or_update_phone)
-
-        phone_form.addWidget(self.phone_input)
-        phone_form.addWidget(self.add_btn)
-        layout.addLayout(phone_form)
-
-        # Error label
-        self.error_label = QLabel("")
-        self.error_label.setStyleSheet("color:#dc2626; font-weight:600;")
-        self.error_label.setWordWrap(True)
-        layout.addWidget(self.error_label)
+        # Add button
+        btn_row = QHBoxLayout()
+        self.add_btn = QPushButton("Add Contact")
+        self.add_btn.clicked.connect(self._add_contact)
+        btn_row.addWidget(self.add_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
 
         # Table
-        self.table = QTableWidget()
-        self.table.setColumnCount(2)
-        self.table.setHorizontalHeaderLabels(["Phone Number", "Actions"])
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table = QTableWidget(0, 3)
+        self.table.setHorizontalHeaderLabels(
+            ["Name", "Phone Number", "Actions"]
+        )
+        self.table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.Stretch
+        )
+        self.table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.Stretch
+        )
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+
         layout.addWidget(self.table)
 
         # Status
-        self.status_label = QLabel("Select a model to manage alert phones")
+        self.status_label = QLabel("Select a model to manage alert contacts")
         self.status_label.setStyleSheet("color:#64748b; font-style:italic;")
         layout.addWidget(self.status_label)
+
         layout.addStretch()
 
     # -------------------------------------------------
-    def load_models_combo(self):
+    def _load_models(self):
         self.model_combo.clear()
         self.model_combo.addItem("— Select a model —", None)
-        models = get_models()
-        for m in models:
+
+        for m in get_models():
             self.model_combo.addItem(m["name"], m["id"])
 
     # -------------------------------------------------
-    def on_model_changed(self, index):
+    def _on_model_changed(self):
         self.current_model_id = self.model_combo.currentData()
-        self.phone_input.clear()
-        self.error_label.clear()
 
         if not self.current_model_id:
-            self.phones = []
+            self.contacts = []
             self.table.setRowCount(0)
-            self.status_label.setText("Select a model to manage alert phones")
-            self.add_btn.setText("Add Phone")
+            self.status_label.setText("Select a model to manage alert contacts")
             return
 
         self.status_label.setText("")
-        self.load_phones()
+        self._load_contacts()
 
     # -------------------------------------------------
-    def load_phones(self):
-        if not self.current_model_id:
-            return
+    def _load_contacts(self):
+        self.contacts = get_phones_by_model_id(self.current_model_id)
+        self.table.setRowCount(len(self.contacts))
 
-        self.phones = get_phones_by_model_id(self.current_model_id)
-        self.table.setRowCount(len(self.phones))
-
-        for i, phone in enumerate(self.phones):
-            self.table.setItem(i, 0, QTableWidgetItem(phone["phone_number"]))
+        for row, c in enumerate(self.contacts):
+            self.table.setItem(row, 0, QTableWidgetItem(c.get("name", "")))
+            self.table.setItem(row, 1, QTableWidgetItem(c["phone_number"]))
 
             actions = QWidget()
             hlay = QHBoxLayout(actions)
-            hlay.setContentsMargins(5, 5, 5, 5)
+            hlay.setContentsMargins(0, 0, 0, 0)
 
             edit_btn = QPushButton("Edit")
-            edit_btn.setStyleSheet("background:#3b82f6; color:white; padding:5px 10px; border-radius:6px;")
-            edit_btn.clicked.connect(lambda _, p=phone: self.edit_phone(p))
+            edit_btn.clicked.connect(
+                lambda _, contact=c: self._edit_contact(contact)
+            )
 
-            delete_btn = QPushButton("Delete")
-            delete_btn.setStyleSheet("background:#ef4444; color:white; padding:5px 10px; border-radius:6px;")
-            delete_btn.clicked.connect(lambda _, pid=phone["id"]: self.delete_phone(pid))
+            del_btn = QPushButton("Delete")
+            del_btn.clicked.connect(
+                lambda _, cid=c["id"]: self._delete_contact(cid)
+            )
 
             hlay.addWidget(edit_btn)
-            hlay.addWidget(delete_btn)
-            self.table.setCellWidget(i, 1, actions)
+            hlay.addWidget(del_btn)
+
+            self.table.setCellWidget(row, 2, actions)
 
     # -------------------------------------------------
-    def validate_phone(self, number):
-        cleaned = re.sub(r"[^0-9+]", "", number.strip())
-        if not cleaned:
-            return None, "Phone number is required"
-
-        if not re.match(r"^\+\d{8,15}$", cleaned) and not re.match(r"^\d{10,15}$", cleaned):
-            return None, "Invalid format. Use +919876543210"
-
-        cleaned = cleaned if cleaned.startswith("+") else "+" + cleaned
-
-        if any(p["phone_number"] == cleaned and p["id"] != getattr(self, "editing_phone_id", None) for p in self.phones):
-            return None, "This phone number is already added"
-
-        return cleaned, ""
-
-    # -------------------------------------------------
-    def add_or_update_phone(self):
+    def _add_contact(self):
         if not self.current_model_id:
-            self.error_label.setText("Please select a model first")
+            QMessageBox.warning(self, "Select Model", "Please select a model first")
             return
 
-        raw = self.phone_input.text()
-        cleaned, error = self.validate_phone(raw)
-
-        if not cleaned:
-            self.error_label.setText(error)
+        dlg = PhoneEditDialog(self)
+        if dlg.exec() != QDialog.Accepted:
             return
 
-        try:
-            if hasattr(self, "editing_phone_id"):
-                update_phone(self.editing_phone_id, cleaned)
-                QMessageBox.information(self, "Success", "Phone number updated")
-                del self.editing_phone_id
-                self.add_btn.setText("Add Phone")
-            else:
-                add_phone(self.current_model_id, cleaned)
-                QMessageBox.information(self, "Success", "Phone number added")
+        name, phone, error = dlg.get_data()
+        if error:
+            QMessageBox.warning(self, "Invalid Data", error)
+            return
 
-            self.phone_input.clear()
-            self.error_label.clear()
-            self.load_phones()
-
-        except Exception as e:
-            self.error_label.setText(str(e))
+        add_phone(self.current_model_id, name, phone)
+        self._load_contacts()
 
     # -------------------------------------------------
-    def edit_phone(self, phone):
-        self.editing_phone_id = phone["id"]
-        self.phone_input.setText(phone["phone_number"])
-        self.phone_input.setFocus()
-        self.add_btn.setText("Update Phone")
-        self.error_label.clear()
+    def _edit_contact(self, contact):
+        dlg = PhoneEditDialog(self, contact)
+        if dlg.exec() != QDialog.Accepted:
+            return
+
+        name, phone, error = dlg.get_data()
+        if error:
+            QMessageBox.warning(self, "Invalid Data", error)
+            return
+
+        update_phone(contact["id"], name, phone)
+        self._load_contacts()
 
     # -------------------------------------------------
-    def delete_phone(self, phone_id):
-        reply = QMessageBox.question(self, "Confirm", "Remove this phone number?")
-        if reply == QMessageBox.StandardButton.Yes:
-            delete_phone(phone_id)
-            self.load_phones()
+    def _delete_contact(self, contact_id):
+        reply = QMessageBox.question(
+            self,
+            "Confirm",
+            "Remove this alert contact?",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+
+        if reply == QMessageBox.Yes:
+            delete_phone(contact_id)
+            self._load_contacts()
 
     # -------------------------------------------------
-    # ✅ REQUIRED BY SettingsWindow
+    # Required by SettingsWindow
     # -------------------------------------------------
     def get_all_phone_records(self):
-        return list(self.phones) if hasattr(self, "phones") else []
+        return list(self.contacts)

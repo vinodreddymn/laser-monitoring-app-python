@@ -1,69 +1,100 @@
-# gsm_simulator.py
 import serial
 import time
-import threading
-import random
 
-# Python simulator connects to COM2 (VSPE pair: COM2 ↔ COM1)
-ser = serial.Serial(
-    port="COM2",
-    baudrate=115200,
-    timeout=1,
-    parity=serial.PARITY_NONE,
-    stopbits=serial.STOPBITS_ONE,
-    bytesize=serial.EIGHTBITS
-)
+PORT = "COM2"
+BAUD = 115200
 
-print("GSM Simulator running on COM2 → connected to Electron on COM1")
-print("Send 'STATUS?' or 'SENDSMS:number:message'")
+CTRL_Z = b"\x1A"
 
-operators = ["Airtel", "Jio", "Vodafone-Idea", "BSNL", "Aircel"]
 
-def generate_status():
-    signal = random.randint(35, 99)
-    network = random.choice(operators)
-    return f"STATUS:READY,SIGNAL={signal},NETWORK={network}\r\n"
+def log(rx_tx, msg):
+    print(f"[{rx_tx}] {msg}")
 
-def read_loop():
+
+def main():
+    print(f"🧪 SIM7670A SIMULATOR STARTED on {PORT}")
+
+    ser = serial.Serial(
+        port=PORT,
+        baudrate=BAUD,
+        timeout=0.1
+    )
+
+    buffer = b""
+    sms_mode = False
+    sms_text = b""
+
     while True:
-        try:
-            if ser.in_waiting:
-                line = ser.readline().decode('utf-8', errors='ignore').strip()
+        if ser.in_waiting:
+            data = ser.read(ser.in_waiting)
+            buffer += data
+
+            # -------------------------------
+            # SMS MODE (RAW)
+            # -------------------------------
+            if sms_mode:
+                if CTRL_Z in buffer:
+                    msg, buffer = buffer.split(CTRL_Z, 1)
+                    sms_text += msg
+
+                    log("SMS", sms_text.decode(errors="ignore"))
+
+                    time.sleep(1)
+                    ser.write(b"\r\n+CMGS: 45\r\nOK\r\n")
+
+                    sms_mode = False
+                    sms_text = b""
+
+                else:
+                    sms_text += buffer
+                    buffer = b""
+
+                continue
+
+            # -------------------------------
+            # COMMAND MODE (LINE-BASED)
+            # -------------------------------
+            while b"\r\n" in buffer:
+                line, buffer = buffer.split(b"\r\n", 1)
+                line = line.strip()
+
                 if not line:
                     continue
 
-                print(f"Received: {line}")
+                cmd = line.decode(errors="ignore")
+                log("RX", cmd)
 
-                # STATUS request → return random operator + signal
-                if line == "STATUS?":
-                    status_msg = generate_status()
-                    ser.write(status_msg.encode())
-                    print("Sent:", status_msg.strip())
-
-                # SEND SMS
-                elif line.startswith("SENDSMS:"):
-                    parts = line.split(":", 2)
-                    if len(parts) == 3:
-                        number, message = parts[1], parts[2]
-                        print(f"Sending SMS to {number}: {message}")
-                        time.sleep(1)
-                        ser.write(b"SMS:SENT\r\n")
-                    else:
-                        ser.write(b"ERROR:INVALID_FORMAT\r\n")
-
-                else:
+                if cmd == "AT":
                     ser.write(b"OK\r\n")
 
-        except Exception as e:
-            print("Error:", e)
-            break
+                elif cmd == "ATE0":
+                    ser.write(b"OK\r\n")
 
-# Run listener thread
-threading.Thread(target=read_loop, daemon=True).start()
+                elif cmd.startswith("AT+CMGF"):
+                    ser.write(b"OK\r\n")
 
-try:
-    while True:
-        time.sleep(1)
-except KeyboardInterrupt:
-    print("\nGSM Simulator stopped")
-    ser.close()
+                elif cmd.startswith("AT+CSCS"):
+                    ser.write(b"OK\r\n")
+
+                elif cmd.startswith("AT+CSMP"):
+                    ser.write(b"OK\r\n")
+
+                elif cmd.startswith("AT+CNMI"):
+                    ser.write(b"OK\r\n")
+
+                elif cmd.startswith("AT+CMGS"):
+                    sms_mode = True
+                    sms_text = b""
+                    time.sleep(0.3)
+                    ser.write(b"> ")
+
+                else:
+                    ser.write(b"ERROR\r\n")
+
+                log("TX", "response sent")
+
+        time.sleep(0.02)
+
+
+if __name__ == "__main__":
+    main()

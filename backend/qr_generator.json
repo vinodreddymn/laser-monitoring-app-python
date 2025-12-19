@@ -1,0 +1,15 @@
+{
+  "qr_size_ratio": 0.77,        
+  "qr_margin": 12,
+  "text_margin": 14,
+  "title_font_size": 66,         
+  "timestamp_font_size": 42,
+  "qr_fill_color": "#000000",
+  "qr_back_color": "#FFFFFF",
+  "text_color": "#000000",
+  "timestamp_color": "#000000",
+  "max_title_font_size": 76,
+  "min_title_font_size": 50,
+  "enable_logo": false,
+  "logo_scale": 0.25
+}

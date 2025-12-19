@@ -1,0 +1,4 @@
+{
+  "sms_sent_retention_hours": 6,
+  "qr_retention_hours": 6
+}
