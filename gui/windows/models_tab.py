@@ -52,13 +52,22 @@ class ModelsTab(QWidget):
         layout.addLayout(header)
 
         # Table
+        # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["Model", "Tolerance (mm)", "Status", "Actions"])
+        self.table.setColumnCount(5)
+        self.table.setHorizontalHeaderLabels(
+            ["Model", "Type", "Tolerance (mm)", "Status", "Actions"]
+        )
+
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
 
         layout.addWidget(self.table)
 
@@ -84,10 +93,19 @@ class ModelsTab(QWidget):
             self.table.setItem(i, 0, QTableWidgetItem(model["name"]))
 
             # ------------------------------------------------
+            # Model Type (RHD / LHD)
+            # ------------------------------------------------
+            model_type = model.get("model_type") or "—"
+            type_item = QTableWidgetItem(model_type)
+            type_item.setTextAlignment(Qt.AlignCenter)
+            type_item.setForeground(Qt.GlobalColor.darkBlue)
+            self.table.setItem(i, 1, type_item)
+
+            # ------------------------------------------------
             # Limits
             # ------------------------------------------------
             self.table.setItem(
-                i, 1,
+                i, 2,
                 QTableWidgetItem(f"{model['lower_limit']:.2f} – {model['upper_limit']:.2f}")
             )
 
@@ -102,7 +120,7 @@ class ModelsTab(QWidget):
             else:
                 status_item.setForeground(Qt.GlobalColor.gray)
 
-            self.table.setItem(i, 2, status_item)
+            self.table.setItem(i, 3, status_item)
 
             # ------------------------------------------------
             # Actions
@@ -111,17 +129,14 @@ class ModelsTab(QWidget):
             hlay = QHBoxLayout(actions)
             hlay.setContentsMargins(5, 5, 5, 5)
 
-            # ✅ ACTIVATE
             activate = QPushButton("Activate")
             activate.setStyleSheet("background:#10b981; color:white; padding:6px 12px; border-radius:6px;")
             activate.clicked.connect(lambda _, m=model: self.activate_model(m))
 
-            # EDIT
             edit = QPushButton("Edit")
             edit.setStyleSheet("background:#3b82f6; color:white; padding:6px 12px; border-radius:6px;")
             edit.clicked.connect(lambda _, m=model: self.edit_model(m))
 
-            # DELETE
             delete = QPushButton("Delete")
             delete.setStyleSheet("background:#ef4444; color:white; padding:6px 12px; border-radius:6px;")
             delete.clicked.connect(lambda _, mid=mid: self.delete_model(mid))
@@ -129,7 +144,7 @@ class ModelsTab(QWidget):
             for btn in (activate, edit, delete):
                 hlay.addWidget(btn)
 
-            self.table.setCellWidget(i, 3, actions)
+            self.table.setCellWidget(i, 4, actions)
 
     # ---------------------------------------------------
     def add_new_model(self):

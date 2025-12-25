@@ -122,12 +122,13 @@ class MainWindow(QWidget):
             return
 
         name = model["name"]
+        model_type = model.get("model_type", "N/A")  # 👈 SAFE DEFAULT
         lo = float(model["lower_limit"])
         hi = float(model["upper_limit"])
 
-        # Only update PlotPanel - no display elsewhere
         self.plot_panel.configure_limits(lo, hi)
-        self.plot_panel.set_model_info(name, lo, hi)
+        self.plot_panel.set_model_info(name, model_type, lo, hi)
+
 
     @Slot(dict)
     def on_cycle_detected(self, cycle: dict):

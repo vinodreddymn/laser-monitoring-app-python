@@ -53,7 +53,7 @@ class HeaderWidget(QFrame):
                 logo_lbl.setPixmap(scaled_pix)
 
         # ---- Company Name (prominent) ----
-        company_lbl = QLabel("NTF ADVANCED COMPOSITES & ENGINEERING PLASTICS")
+        company_lbl = QLabel("ASHTECH ENGINEERING SOLUTIONS")
         company_lbl.setFont(QFont("Segoe UI", 20, QFont.Bold))
         company_lbl.setStyleSheet("""
             color: #00ccff;

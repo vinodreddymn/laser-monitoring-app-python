@@ -1,6 +1,7 @@
 {
-    "id": 12,
-    "name": "G 507",
-    "lower_limit": 35.0,
-    "upper_limit": 89.0
+    "id": 13,
+    "name": "G 510",
+    "model_type": "LHD",
+    "lower_limit": 40.0,
+    "upper_limit": 200.0
 }

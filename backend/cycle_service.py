@@ -32,22 +32,35 @@ def handle_detected_cycle(cycle: dict, signals):
 
     qr_text = None
     qr_image_path = None
+    qr_code_id = None
 
     # --------------------------------------------------
     # QR GENERATION (PASS ONLY)
     # --------------------------------------------------
     if status == "PASS":
         try:
-            qr = generate_and_save_qr_code()
+            qr = generate_and_save_qr_code(
+                model_name=cycle.get("model_name", "UNKNOWN"),
+                peak_value=cycle.get("peak_height", 0.0),
+                timestamp=cycle.get("timestamp")
+            )
 
             qr_text = qr.get("text")
             qr_image_path = qr.get("absolutePath")
+            qr_code_id = qr.get("id")
 
             cycle["qr_text"] = qr_text
-            cycle["qr_code_id"] = qr.get("id")
+            cycle["qr_code_id"] = qr_code_id
             cycle["qr_image_path"] = qr_image_path
 
-            log.info("QR generated: %s", qr_text)
+            log.info(
+                "QR generated",
+                extra={
+                    "qr_text": qr_text,
+                    "model": cycle.get("model_name"),
+                    "peak": cycle.get("peak_height"),
+                },
+            )
 
         except Exception:
             log.exception("QR generation failed")
@@ -85,7 +98,7 @@ def handle_detected_cycle(cycle: dict, signals):
             {
                 "id": cycle_id,
                 "qr_code": qr_text,
-                "qr_image_path": qr_image_path,  # ✅ REQUIRED
+                "qr_image_path": qr_image_path,  # REQUIRED
                 "model_name": cycle.get("model_name", "UNKNOWN"),
                 "pass_fail": status,
             }

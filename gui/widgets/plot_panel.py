@@ -57,6 +57,8 @@ class PlotPanel(QFrame):
         self.lower: Optional[float] = None
         self.upper: Optional[float] = None
         self.model_name: str = ""
+        self.model_type: str = ""
+
         self.current_value: Optional[float] = None
 
         # Plot items
@@ -117,8 +119,8 @@ class PlotPanel(QFrame):
         
         self._install_watermark(
             image_path="assets/watermark.png",
-            opacity=0.06,
-            scale_ratio=0.30   # try 0.25–0.4
+            opacity=0.1,
+            scale_ratio=0.80   # try 0.25–0.4
         )
 
         
@@ -174,11 +176,16 @@ class PlotPanel(QFrame):
         self._draw_tolerance_lines()
         self.reset()
 
-    def set_model_info(self, name: str, lower: float, upper: float):
+    def set_model_info(self, name: str, model_type: str, lower: float, upper: float):
         self.model_name = name
+        self.model_type = model_type
         self.lower = lower
         self.upper = upper
+        self._draw_tolerance_lines()
         self._update_badge()
+
+
+
 
     def append_value(self, value: float):
         now = time.time()
@@ -270,32 +277,46 @@ class PlotPanel(QFrame):
         self.plot.setYRange(ymin - pad, ymax + pad)
 
     def _update_badge(self):
-        if not self.model_name or self.lower is None or self.upper is None:
+        if not self.model_name:
             self.badge_label.setText("")
             return
 
+        lower = self.lower if self.lower is not None else 0.0
+        upper = self.upper if self.upper is not None else 0.0
+
         model_html = (
-            f"<span style='font-size:25px; font-weight:700; color:#58a6ff;'>"
+            f"<span style='font-size:26px; font-weight:800; color:#58a6ff;'>"
             f"{self.model_name}</span>"
         )
 
+        type_html = (
+            f"<span style='font-size:22px; font-weight:600; color:#ffa657;'>"
+            f" &nbsp;[{self.model_type}]</span>"
+        )
+
+        limits_html = (
+            f"<span style='font-size:20px; color:#9da7b1;'>"
+            f" | Min: {lower:.2f} mm"
+            f" | Max: {upper:.2f} mm"
+            f"</span>"
+        )
+
         if self.current_value is None:
-            values_html = (
-                f"<span style='font-size:20px; color:#9da7b1;'>"
-                f" | Min: {self.lower:.2f} mm | Max: {self.upper:.2f} mm"
-                f"</span>"
+            current_html = (
+                f"<span style='font-size:22px; color:#8b949e;'>"
+                f" | Current: --</span>"
             )
         else:
-            values_html = (
-                f"<span style='font-size:20px; color:#00ff99;'>"
-                f" Current: {self.current_value:.2f} mm"
-                f"</span>"
-                f"<span style='font-size:20px; color:#9da7b1;'>"
-                f" | Min: {self.lower:.2f} mm | Max: {self.upper:.2f} mm"
-                f"</span>"
+            current_html = (
+                f"<span style='font-size:24px; font-weight:700; color:#00ff99;'>"
+                f" | Current: {self.current_value:.2f} mm</span>"
             )
 
-        self.badge_label.setText(model_html + values_html)
+        self.badge_label.setText(
+            model_html + type_html + limits_html + current_html
+        )
+
+
 
     # ------------------------------------------------------------------
     # Watermark (static, panel-filling)

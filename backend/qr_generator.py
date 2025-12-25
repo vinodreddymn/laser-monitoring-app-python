@@ -1,7 +1,18 @@
 # ======================================================
 # QR Label Generator – 2" x 1" @ 300 DPI
-# Final layout:
-#   [ centered QR + text ] | [ fixed vertical RHD ]
+#
+# LABEL TEXT  : Part.<counter>
+# DB qr_text  : Part.<counter>
+# QR PAYLOAD  : JSON
+#
+# Example QR payload:
+# {"id":"Part.1023","model":"Toyota Innova","type":"RHD","peak":76.44,"ts":"2025-12-22T22:31:14"}
+#
+# PNG METADATA:
+#  - qr_text
+#  - model_type
+#  - peak_value
+#  - timestamp
 # ======================================================
 
 import json
@@ -9,11 +20,14 @@ import logging
 from pathlib import Path
 from base64 import b64encode
 from typing import Optional, Dict, Any
+from datetime import datetime
 
 import qrcode
 from PIL import Image, ImageDraw, ImageFont
+from PIL.PngImagePlugin import PngInfo
 
-from .qr_codes_dao import save_qr_code, get_qr_code as dao_get_qr_code
+from backend.settings_dao import get_qr_settings, save_qr_settings
+from backend.qr_codes_dao import save_qr_code, get_qr_code as dao_get_qr_code
 
 # ======================================================
 # LOGGING
@@ -25,10 +39,8 @@ log = logging.getLogger(__name__)
 # PATHS
 # ======================================================
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-SETTINGS_FILE = BASE_DIR / "settings.json"
-VISUAL_SETTINGS_FILE = BASE_DIR / "backend" / "qr_generator.json"
 QR_FOLDER = BASE_DIR / "qr_images"
+VISUAL_SETTINGS_FILE = BASE_DIR / "backend" / "qr_generator.json"
 
 FONTS_DIR = Path(__file__).resolve().parent / "fonts"
 FONT_BOLD = FONTS_DIR / "Roboto-Bold.ttf"
@@ -49,16 +61,16 @@ QR_TOP = 18
 TEXT_SIZE = 27
 TEXT_GAP = 0
 
-RHD_TEXT = "LHD"       # common for now
-RHD_SIZE = 120
-RHD_RIGHT_MARGIN = 10
-RHD_VERTICAL_NUDGE = 6
+TYPE_SIZE = 120
+TYPE_RIGHT_MARGIN = 10
+TYPE_VERTICAL_NUDGE = 3
 
 # ======================================================
 # HELPERS
 # ======================================================
 def ensure_dirs():
     QR_FOLDER.mkdir(parents=True, exist_ok=True)
+
 
 def load_font(size: int) -> ImageFont.FreeTypeFont:
     try:
@@ -67,32 +79,92 @@ def load_font(size: int) -> ImageFont.FreeTypeFont:
         log.warning("Roboto-Bold.ttf not found, using default font")
         return ImageFont.load_default()
 
-# ======================================================
-# SETTINGS / AUTO COUNTER
-# ======================================================
-def load_settings() -> Dict[str, Any]:
-    with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
 
-def save_settings(data: Dict[str, Any]):
-    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+def normalize_timestamp(ts: Optional[str] = None) -> str:
+    """
+    Ensures timestamp is in ISO format with seconds only (no microseconds).
+    """
+    if not ts:
+        return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
+    try:
+        dt = datetime.fromisoformat(ts)
+    except ValueError:
+        # fallback if format is unexpected
+        return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+    return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+
+# ======================================================
+# SETTINGS (DAO-BASED)
+# ======================================================
 def get_next_qr_text() -> str:
-    cfg = load_settings()
-    text = f"{cfg['qr_text_prefix']}.{cfg['qr_start_counter']}"
-    cfg["qr_start_counter"] += 1
-    save_settings(cfg)
-    return text
+    """
+    Returns next QR ID and safely increments counter.
+    Format: <prefix>.<counter>
+    """
+    cfg = get_qr_settings()
+
+    prefix = cfg.get("qr_text_prefix", "Part")
+    counter = int(cfg.get("qr_start_counter", 1))
+
+    qr_text = f"{prefix}.{counter}"
+
+    save_qr_settings(
+        prefix=prefix,
+        counter=counter + 1,
+        model_type=cfg.get("model_type", "RHD"),
+    )
+
+    return qr_text
+
+
+def get_model_type() -> str:
+    cfg = get_qr_settings()
+    return cfg.get("model_type", "RHD")
+
 
 # ======================================================
 # MAIN GENERATOR
 # ======================================================
-def generate_and_save_qr_code() -> Dict[str, Any]:
+def generate_and_save_qr_code(
+    model_name: str,
+    peak_value: float,
+    timestamp: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Generates QR label with:
+    - Printed text = qr_text
+    - DB qr_text   = qr_text
+    - QR payload   = JSON
+    """
+
     ensure_dirs()
 
-    visual = json.load(open(VISUAL_SETTINGS_FILE, "r"))
-    qr_text = get_next_qr_text()
+    timestamp = normalize_timestamp(timestamp)
+
+
+    visual = json.load(open(VISUAL_SETTINGS_FILE, "r", encoding="utf-8"))
+
+    qr_text = get_next_qr_text()      # ID ONLY
+    model_type = get_model_type()
+
+    # --------------------------------------------------
+    # QR PAYLOAD (JSON)
+    # --------------------------------------------------
+    qr_payload = json.dumps(
+        {
+            "id": qr_text,
+            "type": model_type,
+            "peak": round(float(peak_value), 2),
+            "ts": timestamp,
+        },
+        separators=(",", ":")  # compact JSON
+    )
+
+    log.info("Generating QR %s | payload=%s", qr_text, qr_payload)
 
     filename = f"{qr_text}.png"
     rel_path = Path("qr_images") / filename
@@ -105,82 +177,67 @@ def generate_and_save_qr_code() -> Dict[str, Any]:
     draw = ImageDraw.Draw(canvas)
 
     # --------------------------------------------------
-    # BUILD RHD FIRST (LOCK RIGHT)
+    # VERTICAL MODEL TYPE (RIGHT)
     # --------------------------------------------------
-    rhd_font = load_font(RHD_SIZE)
+    type_font = load_font(TYPE_SIZE)
 
     dummy = Image.new("RGB", (10, 10))
     d = ImageDraw.Draw(dummy)
-    rhd_bbox = d.textbbox((0, 0), RHD_TEXT, font=rhd_font)
+    bbox = d.textbbox((0, 0), model_type, font=type_font)
 
-    rhd_w = rhd_bbox[2] - rhd_bbox[0]
-    rhd_h = rhd_bbox[3] - rhd_bbox[1]
+    w = bbox[2] - bbox[0]
+    h = bbox[3] - bbox[1]
 
-    PADDING = 40
-    rhd_temp = Image.new(
-        "RGBA",
-        (rhd_w + PADDING * 2, rhd_h + PADDING * 2),
-        (0, 0, 0, 0)
-    )
+    pad = 40
+    temp = Image.new("RGBA", (w + pad * 2, h + pad * 2), (0, 0, 0, 0))
+    td = ImageDraw.Draw(temp)
+    td.text((pad, pad), model_type, fill="black", font=type_font)
 
-    td = ImageDraw.Draw(rhd_temp)
-    td.text((PADDING, PADDING), RHD_TEXT, fill="black", font=rhd_font)
+    type_img = temp.rotate(-90, expand=True)
 
-    rhd_img = rhd_temp.rotate(-90, expand=True)
+    type_x = LABEL_W - type_img.width - TYPE_RIGHT_MARGIN
+    type_y = (LABEL_H - type_img.height) // 2 + TYPE_VERTICAL_NUDGE
 
-    rhd_x = LABEL_W - rhd_img.width - RHD_RIGHT_MARGIN
-    rhd_y = (LABEL_H - rhd_img.height) // 2 + RHD_VERTICAL_NUDGE
-
-    canvas.paste(rhd_img, (rhd_x, rhd_y), rhd_img)
+    canvas.paste(type_img, (type_x, type_y), type_img)
 
     # --------------------------------------------------
-    # DEFINE CONTENT AREA (LEFT OF RHD)
+    # CONTENT AREA
     # --------------------------------------------------
-    CONTENT_LEFT = 0
-    CONTENT_RIGHT = rhd_x
-    CONTENT_WIDTH = CONTENT_RIGHT - CONTENT_LEFT
+    CONTENT_RIGHT = type_x
+    CONTENT_WIDTH = CONTENT_RIGHT
 
     # --------------------------------------------------
-    # QR CODE
+    # QR CODE (JSON PAYLOAD)
     # --------------------------------------------------
     qr = qrcode.QRCode(
         error_correction=qrcode.constants.ERROR_CORRECT_H,
         box_size=8,
-        border=2
+        border=2,
     )
-    qr.add_data(qr_text)
+    qr.add_data(qr_payload)
     qr.make(fit=True)
 
     qr_img = qr.make_image(
         fill_color=visual.get("qr_fill_color", "black"),
-        back_color="white"
+        back_color="white",
     ).convert("RGB")
 
     qr_img = qr_img.resize((QR_SIZE, QR_SIZE), Image.LANCZOS)
 
     # --------------------------------------------------
-    # TEXT MEASUREMENT
+    # LABEL TEXT (ID ONLY)
     # --------------------------------------------------
     text_font = load_font(TEXT_SIZE)
-    text_bbox = draw.textbbox((0, 0), qr_text, font=text_font)
-    text_w = text_bbox[2] - text_bbox[0]
-    text_h = text_bbox[3] - text_bbox[1]
+    bbox = draw.textbbox((0, 0), qr_text, font=text_font)
+    text_w = bbox[2] - bbox[0]
 
-    # --------------------------------------------------
-    # QR + TEXT BLOCK SIZE
-    # --------------------------------------------------
-    BLOCK_WIDTH = max(QR_SIZE, text_w)
-    BLOCK_HEIGHT = QR_SIZE + TEXT_GAP + text_h
+    block_w = max(QR_SIZE, text_w)
+    block_x = (CONTENT_WIDTH - block_w) // 2
 
-    # --------------------------------------------------
-    # CENTER BLOCK IN REMAINING SPACE
-    # --------------------------------------------------
-    block_x = CONTENT_LEFT + (CONTENT_WIDTH - BLOCK_WIDTH) // 2
-
-    qr_x = block_x + (BLOCK_WIDTH - QR_SIZE) // 2
+    qr_x = block_x + (block_w - QR_SIZE) // 2
     qr_y = QR_TOP
 
-    text_x = block_x + (BLOCK_WIDTH - text_w) // 2
+    text_x = block_x + (block_w - text_w) // 2
     text_y = qr_y + QR_SIZE + TEXT_GAP
 
     canvas.paste(qr_img, (qr_x, qr_y))
@@ -188,24 +245,47 @@ def generate_and_save_qr_code() -> Dict[str, Any]:
         (text_x, text_y),
         qr_text,
         fill=visual.get("text_color", "black"),
-        font=text_font
+        font=text_font,
     )
+
+    # --------------------------------------------------
+    # PNG METADATA (FULL DETAILS)
+    # --------------------------------------------------
+    meta = PngInfo()
+    meta.add_text("qr_text", qr_text)
+    meta.add_text("model_name", model_name)
+    meta.add_text("model_type", model_type)
+    meta.add_text("peak_value", str(peak_value))
+    meta.add_text("timestamp", timestamp)
+    
 
     # --------------------------------------------------
     # SAVE
     # --------------------------------------------------
-    canvas.save(abs_path, dpi=(DPI, DPI), optimize=True)
+    canvas.save(
+        abs_path,
+        dpi=(DPI, DPI),
+        pnginfo=meta,
+        optimize=True,
+    )
 
     qr_id = save_qr_code(str(rel_path), qr_text)
-    log.info(f"QR label generated: {qr_text}")
+
+    log.info("QR label generated successfully: %s", qr_text)
 
     return {
         "id": qr_id,
-        "text": qr_text,
+        "text": qr_text,                 # DB + label
+        "qr_payload": qr_payload,        # JSON (optional use)
+        "model_name": model_name,
+        "model_type": model_type,
+        "peak_value": peak_value,
+        "timestamp": timestamp,
         "filename": filename,
         "absolutePath": str(abs_path),
-        "relativePath": str(rel_path)
+        "relativePath": str(rel_path),
     }
+
 
 # ======================================================
 # FETCH QR (BASE64)
