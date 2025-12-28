@@ -1,3 +1,5 @@
+# gui/windows/qr_settings_modal.py
+
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout,
     QLineEdit, QLabel, QDialogButtonBox,
@@ -7,11 +9,12 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 
 from backend.settings_dao import get_qr_settings, save_qr_settings
+from gui.styles.app_styles import apply_base_dialog_style
 
 
 class QRSettingsModal(QDialog):
     """
-    QR Settings Modal – Qt Native (Production Safe)
+    QR Settings Modal – Production Safe
 
     Purpose:
     - Configure QR prefix & counter
@@ -19,12 +22,13 @@ class QRSettingsModal(QDialog):
     - Model type is READ-ONLY (comes from model)
 
     Styling:
-    - styles/dialogs.qss
+    - Internal (apply_base_dialog_style)
     """
 
-    WIDTH = 460
-    HEIGHT = 360
+    WIDTH = 480
+    HEIGHT = 380
 
+    # --------------------------------------------------
     def __init__(self, parent=None, model=None, callback=None):
         super().__init__(parent)
 
@@ -32,13 +36,18 @@ class QRSettingsModal(QDialog):
         self.callback = callback
 
         self.setObjectName("QRSettingsModal")
-        self.setWindowTitle(f"Activate Model: {self.model.get('name', '')}")
+        self.setWindowTitle("QR Code Settings")
         self.setModal(True)
         self.setFixedSize(self.WIDTH, self.HEIGHT)
 
         self._load_settings()
         self._build_ui()
 
+        # Apply shared internal styling
+        apply_base_dialog_style(self)
+
+    # --------------------------------------------------
+    # Data
     # --------------------------------------------------
     def _load_settings(self):
         settings = get_qr_settings() or {}
@@ -53,90 +62,117 @@ class QRSettingsModal(QDialog):
         self.model_type = self.model.get("model_type", "RHD")
 
     # --------------------------------------------------
+    # UI
+    # --------------------------------------------------
     def _build_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(28, 28, 28, 28)
-        layout.setSpacing(20)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(28, 28, 28, 28)
+        root.setSpacing(22)
 
-        # --------------------------------------------------
-        # Title
-        # --------------------------------------------------
+        # ---------------- Title ----------------
         title = QLabel(
-            f"Activate Model: {self.model.get('name', '')} "
-            f"({self.model_type})"
+            f"QR Settings – {self.model.get('name', '')}"
         )
+        title.setObjectName("DialogTitle")
         title.setAlignment(Qt.AlignCenter)
-        title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
-        layout.addWidget(title)
+        title.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
 
-        # --------------------------------------------------
-        # Form
-        # --------------------------------------------------
+        subtitle = QLabel(f"Model Type: {self.model_type}")
+        subtitle.setObjectName("MutedText")
+        subtitle.setAlignment(Qt.AlignCenter)
+
+        root.addWidget(title)
+        root.addWidget(subtitle)
+
+        # ---------------- Form ----------------
         form = QFormLayout()
         form.setSpacing(14)
+        form.setLabelAlignment(Qt.AlignRight)
 
         self.prefix_edit = QLineEdit(self.qr_prefix)
+        self.prefix_edit.setPlaceholderText("QR text prefix (e.g. G510)")
+
         self.counter_edit = QLineEdit(str(self.qr_counter))
-
-        self.prefix_edit.setPlaceholderText("QR text prefix")
         self.counter_edit.setPlaceholderText("Starting counter")
-
-        self.counter_edit.setMaximumWidth(160)
+        self.counter_edit.setMaximumWidth(180)
 
         form.addRow("QR Text Prefix:", self.prefix_edit)
         form.addRow("Starting Counter:", self.counter_edit)
 
-        layout.addLayout(form)
+        root.addLayout(form)
 
-        # --------------------------------------------------
-        # Preview
-        # --------------------------------------------------
+        # ---------------- Preview ----------------
+        preview_title = QLabel("Next QR Code Preview")
+        preview_title.setObjectName("SectionTitle")
+        preview_title.setAlignment(Qt.AlignCenter)
+
         self.preview_label = QLabel()
         self.preview_label.setAlignment(Qt.AlignCenter)
         self.preview_label.setFont(QFont("Consolas", 22, QFont.Weight.Bold))
-        self.preview_label.setObjectName("QRPreview")
+        self.preview_label.setObjectName("QrPreview")
 
-        layout.addWidget(self.preview_label)
+        root.addWidget(preview_title)
+        root.addWidget(self.preview_label)
 
         self.prefix_edit.textChanged.connect(self._update_preview)
         self.counter_edit.textChanged.connect(self._update_preview)
         self._update_preview()
 
-        # --------------------------------------------------
-        # Buttons
-        # --------------------------------------------------
+        # ---------------- Buttons ----------------
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         )
-        buttons.button(QDialogButtonBox.Ok).setText("Activate & Save")
+
+        ok_btn = buttons.button(QDialogButtonBox.Ok)
+        ok_btn.setText("Save & Apply")
+        ok_btn.setProperty("role", "primary")
+
+        cancel_btn = buttons.button(QDialogButtonBox.Cancel)
+        cancel_btn.setProperty("role", "secondary")
+
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
 
-        layout.addWidget(buttons)
+        root.addStretch()
+        root.addWidget(buttons)
 
+    # --------------------------------------------------
+    # Logic
     # --------------------------------------------------
     def _update_preview(self):
         prefix = self.prefix_edit.text().strip() or "Text"
+
         try:
             counter = int(self.counter_edit.text())
         except ValueError:
             counter = 1
 
         self.preview_label.setText(
-            f"Next QR → {prefix}.{str(counter).zfill(5)}"
+            f"{prefix}.{str(counter).zfill(5)}"
         )
 
     # --------------------------------------------------
     def _save(self):
         prefix = self.prefix_edit.text().strip()
+
+        if not prefix:
+            QMessageBox.warning(
+                self,
+                "Invalid Prefix",
+                "QR text prefix cannot be empty."
+            )
+            self.prefix_edit.setFocus()
+            return
+
         try:
             counter = int(self.counter_edit.text())
         except ValueError:
             QMessageBox.warning(
                 self,
                 "Invalid Counter",
-                "Starting counter must be a number."
+                "Starting counter must be a valid number."
             )
+            self.counter_edit.setFocus()
             return
 
         save_qr_settings(

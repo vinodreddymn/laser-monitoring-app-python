@@ -14,6 +14,7 @@ from backend.models_dao import (
     get_active_model
 )
 
+from gui.styles.app_styles import apply_base_dialog_style
 from .model_edit_dialog import ModelEditDialog
 from .activate_model_dialog import ActivateModelDialog
 
@@ -44,19 +45,23 @@ class ModelsTab(QWidget):
         self._build_ui()
         self.refresh()
 
+        apply_base_dialog_style(self)
+
     # -------------------------------------------------
     # UI
     # -------------------------------------------------
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setSpacing(20)
+        root.setSpacing(22)
         root.setContentsMargins(28, 28, 28, 28)
 
         # ---------------- HEADER ----------------
         header = QHBoxLayout()
+        header.setSpacing(12)
 
         title = QLabel("Quality Control Models")
-        title.setObjectName("WindowTitle")
+        title.setObjectName("SectionTitle")
+        title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
 
         add_btn = QPushButton("Add New Model")
         add_btn.setMinimumHeight(36)
@@ -83,15 +88,15 @@ class ModelsTab(QWidget):
         self.table.setShowGrid(False)
 
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Stretch)  # Model
-        header.setSectionResizeMode(1, QHeaderView.Fixed)    # Type
-        header.setSectionResizeMode(2, QHeaderView.Stretch) # Tolerance
-        header.setSectionResizeMode(3, QHeaderView.Fixed)   # Status
-        header.setSectionResizeMode(4, QHeaderView.Fixed)   # Actions
+        header.setSectionResizeMode(0, QHeaderView.Stretch)   # Model
+        header.setSectionResizeMode(1, QHeaderView.Fixed)     # Type
+        header.setSectionResizeMode(2, QHeaderView.Stretch)  # Tolerance
+        header.setSectionResizeMode(3, QHeaderView.Fixed)    # Status
+        header.setSectionResizeMode(4, QHeaderView.Fixed)    # Actions
 
         self.table.setColumnWidth(1, 90)
-        self.table.setColumnWidth(3, 100)
-        self.table.setColumnWidth(4, 300)
+        self.table.setColumnWidth(3, 110)
+        self.table.setColumnWidth(4, 320)
 
         root.addWidget(self.table)
 
@@ -138,7 +143,7 @@ class ModelsTab(QWidget):
 
         # ---------------- STATUS ----------------
         status_item = QTableWidgetItem(
-            "Active" if is_active else "Inactive"
+            "ACTIVE" if is_active else "INACTIVE"
         )
         status_item.setTextAlignment(Qt.AlignCenter)
 
@@ -146,7 +151,7 @@ class ModelsTab(QWidget):
             status_item.setForeground(QColor("#22c55e"))
             status_item.setFont(QFont("Segoe UI", weight=QFont.Bold))
         else:
-            status_item.setForeground(QColor("#6b7280"))
+            status_item.setForeground(QColor("#94a3b8"))
 
         self.table.setItem(row, 3, status_item)
 
@@ -183,11 +188,14 @@ class ModelsTab(QWidget):
 
     # -------------------------------------------------
     def _apply_active_style(self, item: QTableWidgetItem, is_active: bool):
+        """
+        Apply consistent visual style for active vs inactive rows
+        """
         if is_active:
             item.setForeground(QColor("#22c55e"))
             item.setFont(QFont("Segoe UI", weight=QFont.Bold))
         else:
-            item.setForeground(QColor("#6b7280"))
+            item.setForeground(QColor("#cbd5f5"))
 
     # -------------------------------------------------
     # ACTIONS

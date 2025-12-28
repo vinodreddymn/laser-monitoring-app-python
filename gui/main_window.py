@@ -1,7 +1,5 @@
-# gui/main_window.py
-
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QDialog
+    QWidget, QVBoxLayout, QHBoxLayout, QDialog, QMessageBox
 )
 from PySide6.QtCore import Qt, QTimer, QDateTime, Slot
 
@@ -10,6 +8,8 @@ from backend.cycles_dao import get_cycles
 from backend.sms_sender import sms_signals
 from backend.gsm_modem import modem_signals
 from backend.usb_printer_manager import printer_signals
+
+from config.app_config import WINDOW_TITLE
 
 from gui.windows.settings_window import SettingsWindow
 from gui.windows.password_modal import PasswordModal
@@ -22,26 +22,21 @@ from gui.widgets.header_widget import HeaderWidget
 
 class MainWindow(QWidget):
     """
-    Main Application Window – Production Tight Layout
+    Main Application Window – Production / Kiosk Ready
 
-    Principles:
+    - Fullscreen kiosk support
+    - Secure shutdown
     - Zero wasted space
-    - Header/Footer fixed (60 px)
-    - Plot dominates
-    - Result compact
-    - Cycles aligned, no float gaps
+    - Deterministic layout
     """
 
-
-    KIOSK_MODE = True
+    KIOSK_MODE = False  # Set to True for kiosk mode
 
     def __init__(self, signals):
         super().__init__()
         self.signals = signals
 
-        self.setWindowTitle(
-            "NTF Advanced Composites & Engineering Plastics – Pneumatic Laser QC System"
-        )
+        self.setWindowTitle(WINDOW_TITLE)
         self.setMinimumSize(1600, 900)
 
         self._build_ui()
@@ -57,7 +52,6 @@ class MainWindow(QWidget):
         else:
             self.showMaximized()
 
-
         QTimer.singleShot(300, self.refresh_active_model)
         QTimer.singleShot(500, self.refresh_cycles)
 
@@ -66,22 +60,23 @@ class MainWindow(QWidget):
     # ============================================================
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(6, 6, 6, 6)   # 🔽 drastically reduced
+        root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(6)
 
         # ---------------- HEADER ----------------
-        self.header = HeaderWidget(self.open_settings)
+        self.header = HeaderWidget(
+            on_settings_clicked=self.open_settings,
+            on_shutdown_clicked=self.request_shutdown,
+            kiosk_mode=self.KIOSK_MODE
+        )
         root.addWidget(self.header)
 
         # ---------------- MAIN CONTENT ----------------
         content = QHBoxLayout()
         content.setSpacing(6)
-        content.setContentsMargins(0, 0, 0, 0)
 
-        # ===== LEFT: Plot + Result =====
         left = QVBoxLayout()
         left.setSpacing(6)
-        left.setContentsMargins(0, 0, 0, 0)
 
         self.plot_panel = PlotPanel()
         self.result_panel = ResultPanel()
@@ -89,9 +84,7 @@ class MainWindow(QWidget):
         left.addWidget(self.plot_panel, stretch=7)
         left.addWidget(self.result_panel, stretch=3)
 
-        # ===== RIGHT: Cycles =====
         self.cycles_panel = CyclesPanel(kiosk_mode=self.KIOSK_MODE)
-
 
         content.addLayout(left, stretch=4)
         content.addWidget(self.cycles_panel, stretch=1)
@@ -106,29 +99,13 @@ class MainWindow(QWidget):
     # SIGNALS
     # ============================================================
     def _connect_signals(self):
-        # Laser values
         self.signals.laser_value.connect(self.plot_panel.append_value)
-
-        # Cycle detection
         self.signals.cycle_detected.connect(self.on_cycle_detected)
-
-        # Laser connection state (UI only)
         self.signals.laser_status.connect(self.on_laser_status)
 
-        # PLC
         self.signals.plc_status.connect(self.footer.update_plc_status)
-
-        # GSM modem
-        modem_signals.modem_connected.connect(
-            self.footer.update_modem_status
-        )
-
-        # Printer
-        printer_signals.printer_status.connect(
-            self.footer.update_printer_status
-        )
-
-        # SMS
+        modem_signals.modem_connected.connect(self.footer.update_modem_status)
+        printer_signals.printer_status.connect(self.footer.update_printer_status)
         sms_signals.sms_sent.connect(self.footer.show_sms)
 
     # ============================================================
@@ -140,9 +117,6 @@ class MainWindow(QWidget):
         self.clock_timer.start(1000)
         self._update_datetime()
 
-    # ============================================================
-    # HEADER
-    # ============================================================
     def _update_datetime(self):
         self.header.set_datetime(
             QDateTime.currentDateTime().toString(
@@ -154,13 +128,32 @@ class MainWindow(QWidget):
     # SETTINGS
     # ============================================================
     def open_settings(self):
-        password_modal = PasswordModal(self)
-        if password_modal.exec() != QDialog.Accepted:
+        pwd = PasswordModal(self)
+        if pwd.exec() != QDialog.Accepted:
             return
 
         dlg = SettingsWindow(self)
         dlg.settings_applied.connect(self.refresh_active_model)
         dlg.exec()
+
+    # ============================================================
+    # SHUTDOWN
+    # ============================================================
+    def request_shutdown(self):
+        pwd = PasswordModal(self)
+        if pwd.exec() != QDialog.Accepted:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Confirm Shutdown",
+            "Exit application?\n\nMonitoring will stop.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            self.close()
 
     # ============================================================
     # MODEL
@@ -171,14 +164,16 @@ class MainWindow(QWidget):
             self.plot_panel.reset()
             return
 
-        name = model["name"]
-        model_type = model.get("model_type", "N/A")
-        lower = float(model["lower_limit"])
-        upper = float(model["upper_limit"])
+        self.plot_panel.configure_limits(
+            float(model["lower_limit"]),
+            float(model["upper_limit"])
+        )
 
-        self.plot_panel.configure_limits(lower, upper)
         self.plot_panel.set_model_info(
-            name, model_type, lower, upper
+            model["name"],
+            model.get("model_type", "N/A"),
+            float(model["lower_limit"]),
+            float(model["upper_limit"])
         )
 
     # ============================================================
@@ -201,7 +196,7 @@ class MainWindow(QWidget):
         self.cycles_panel.update_cycles(cycles)
 
     # ============================================================
-    # LASER STATUS (UI ONLY)
+    # LASER STATUS
     # ============================================================
     @Slot(str)
     def on_laser_status(self, status: str):

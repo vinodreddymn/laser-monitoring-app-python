@@ -1,5 +1,3 @@
-# gui/widgets/header_widget.py
-
 import os
 from PySide6.QtWidgets import (
     QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy
@@ -10,35 +8,39 @@ from PySide6.QtCore import Qt
 
 class HeaderWidget(QFrame):
     """
-    Enhanced Application Header – Modern & Professional
+    Application Header – Kiosk Aware
 
     - Fixed 60px industrial header
-    - Subtle gradient background
-    - Optimized for large logo (1685 × 510 px)
-    - Transparent labels & logo
+    - Gradient background
+    - Logo + company name
     - Live date & time
-    - Single interactive Settings button
+    - Settings button (always visible)
+    - Shutdown icon (ONLY in kiosk mode)
     """
 
     HEADER_HEIGHT = 60
     LOGO_HEIGHT = 36
 
-    def __init__(self, on_settings_clicked, parent=None):
+    def __init__(
+        self,
+        on_settings_clicked,
+        on_shutdown_clicked=None,
+        kiosk_mode: bool = False,
+        parent=None
+    ):
         super().__init__(parent)
+
         self.on_settings_clicked = on_settings_clicked
+        self.on_shutdown_clicked = on_shutdown_clicked
+        self.kiosk_mode = kiosk_mode
 
-        # --- Header height control ---
         self.setFixedHeight(self.HEADER_HEIGHT)
-
         self._build_ui()
 
-    # --------------------------------------------------
-    # UI Builder
     # --------------------------------------------------
     def _build_ui(self):
         self.setObjectName("HeaderWidget")
 
-        # --- Header background ---
         self.setStyleSheet("""
             #HeaderWidget {
                 background: qlineargradient(
@@ -51,106 +53,87 @@ class HeaderWidget(QFrame):
             }
         """)
 
-        # --- Layout ---
         layout = QHBoxLayout(self)
         layout.setContentsMargins(20, 6, 20, 6)
-        layout.setSpacing(16)
+        layout.setSpacing(12)
 
-        # --------------------------------------------------
-        # Logo (transparent background)
-        # --------------------------------------------------
-        logo_lbl = QLabel()
-        logo_lbl.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-        logo_lbl.setFixedHeight(self.LOGO_HEIGHT)
-        logo_lbl.setStyleSheet("background: transparent;")
+        # ---------------- Logo ----------------
+        logo = QLabel()
+        logo.setFixedHeight(self.LOGO_HEIGHT)
+        logo.setStyleSheet("background: transparent;")
 
         logo_path = os.path.join("assets", "logo.png")
         if os.path.exists(logo_path):
             pixmap = QPixmap(logo_path)
             if not pixmap.isNull():
-                logo_lbl.setPixmap(
+                logo.setPixmap(
                     pixmap.scaledToHeight(
                         self.LOGO_HEIGHT,
                         Qt.SmoothTransformation
                     )
                 )
 
-        # --------------------------------------------------
-        # Company Name
-        # --------------------------------------------------
-        company_lbl = QLabel("ASHTECH ENGINEERING SOLUTIONS")
-        company_lbl.setFont(QFont("Segoe UI", 18, QFont.Bold))
-        company_lbl.setStyleSheet("""
-            background: transparent;
-            color: #7dd3fc;
-            letter-spacing: 0.5px;
-        """)
-        company_lbl.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-        company_lbl.setSizePolicy(
-            QSizePolicy.Expanding,
-            QSizePolicy.Preferred
-        )
+        # ---------------- Company ----------------
+        company = QLabel("ASHTECH ENGINEERING SOLUTIONS")
+        company.setFont(QFont("Segoe UI", 18, QFont.Bold))
+        company.setStyleSheet("color:#7dd3fc; background:transparent;")
+        company.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
-        # --------------------------------------------------
-        # Date & Time
-        # --------------------------------------------------
+        # ---------------- Date / Time ----------------
         self.datetime_lbl = QLabel("")
         self.datetime_lbl.setFont(QFont("Segoe UI", 15, QFont.DemiBold))
-        self.datetime_lbl.setStyleSheet("""
-            background: transparent;
-            color: #93c5fd;
-        """)
-        self.datetime_lbl.setAlignment(Qt.AlignVCenter | Qt.AlignRight)
+        self.datetime_lbl.setStyleSheet("color:#93c5fd; background:transparent;")
 
-        # --------------------------------------------------
-        # Settings Button
-        # --------------------------------------------------
+        # ---------------- Settings ----------------
         settings_btn = QPushButton("Settings")
         settings_btn.setFixedSize(120, 34)
-        settings_btn.setFont(QFont("Segoe UI", 15, QFont.Bold))
+        settings_btn.setFont(QFont("Segoe UI", 14, QFont.Bold))
         settings_btn.setCursor(Qt.PointingHandCursor)
         settings_btn.clicked.connect(self.on_settings_clicked)
         settings_btn.setStyleSheet("""
             QPushButton {
-                background: qlineargradient(
-                    x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #1a5fb3,
-                    stop:1 #0f4299
-                );
-                color: white;
-                border: 1px solid #2a7fd4;
-                border-radius: 7px;
-                padding: 0px 14px;
+                background:#1d4ed8;
+                color:white;
+                border-radius:7px;
             }
-            QPushButton:hover {
-                background: qlineargradient(
-                    x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #2470d0,
-                    stop:1 #1855b8
-                );
-                border: 1px solid #3a9eff;
-            }
-            QPushButton:pressed {
-                background: #0d3680;
-                border: 1px solid #1a5fb3;
-            }
+            QPushButton:hover { background:#2563eb; }
+            QPushButton:pressed { background:#1e40af; }
         """)
 
-        # --------------------------------------------------
-        # Assemble Layout
-        # --------------------------------------------------
-        if logo_lbl.pixmap() is not None:
-            layout.addWidget(logo_lbl)
-
-        layout.addWidget(company_lbl)
+        # ---------------- Assemble ----------------
+        layout.addWidget(logo)
+        layout.addWidget(company)
         layout.addStretch()
         layout.addWidget(self.datetime_lbl)
         layout.addSpacing(12)
         layout.addWidget(settings_btn)
 
-    # --------------------------------------------------
-    # Public API
+        # ---------------- Shutdown ICON (KIOSK ONLY) ----------------
+        if self.kiosk_mode and self.on_shutdown_clicked:
+            shutdown_btn = QPushButton("⏻")
+            shutdown_btn.setFixedSize(38, 34)
+            shutdown_btn.setFont(QFont("Segoe UI", 18, QFont.Bold))
+            shutdown_btn.setCursor(Qt.PointingHandCursor)
+            shutdown_btn.setToolTip("Shutdown application")
+            shutdown_btn.clicked.connect(self.on_shutdown_clicked)
+            shutdown_btn.setStyleSheet("""
+                QPushButton {
+                    background:transparent;
+                    color:#ef4444;
+                    border:1px solid #7f1d1d;
+                    border-radius:7px;
+                }
+                QPushButton:hover {
+                    background:#7f1d1d;
+                    color:white;
+                }
+                QPushButton:pressed {
+                    background:#991b1b;
+                }
+            """)
+            layout.addSpacing(6)
+            layout.addWidget(shutdown_btn)
+
     # --------------------------------------------------
     def set_datetime(self, text: str):
-        """Update the current date and time display"""
         self.datetime_lbl.setText(text)

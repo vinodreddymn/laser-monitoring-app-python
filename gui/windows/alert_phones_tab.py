@@ -1,3 +1,5 @@
+# gui/windows/alert_phones_tab.py
+
 import re
 
 from PySide6.QtWidgets import (
@@ -6,6 +8,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QLineEdit, QFormLayout, QDialog, QDialogButtonBox
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 
 from backend.models_dao import get_models
 from backend.alert_phones_dao import (
@@ -15,6 +18,9 @@ from backend.alert_phones_dao import (
     delete_phone
 )
 
+from gui.styles.app_styles import apply_base_dialog_style
+
+
 # =====================================================
 # Phone Add / Edit Dialog
 # =====================================================
@@ -22,15 +28,20 @@ class PhoneEditDialog(QDialog):
     """
     Alert Contact Dialog – Production Safe
 
+    Purpose:
+    - Add or edit alert contact
+    - Validate phone number format
+
     Styling:
-    - styles/dialogs.qss
+    - Internal (apply_base_dialog_style)
     """
 
-    WIDTH = 360
-    HEIGHT = 220
+    WIDTH = 380
+    HEIGHT = 240
 
     def __init__(self, parent=None, contact=None):
         super().__init__(parent)
+
         self.contact = contact
 
         self.setObjectName("PhoneEditDialog")
@@ -41,15 +52,27 @@ class PhoneEditDialog(QDialog):
         self.setFixedSize(self.WIDTH, self.HEIGHT)
 
         self._build_ui()
+        apply_base_dialog_style(self)
 
     # -------------------------------------------------
     def _build_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(16)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(24, 24, 24, 24)
+        root.setSpacing(18)
 
+        # ---------------- Title ----------------
+        title = QLabel(
+            "Edit Alert Contact" if self.contact else "Add Alert Contact"
+        )
+        title.setObjectName("DialogTitle")
+        title.setAlignment(Qt.AlignCenter)
+        title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+
+        root.addWidget(title)
+
+        # ---------------- Form ----------------
         form = QFormLayout()
-        form.setSpacing(12)
+        form.setSpacing(14)
 
         self.name_input = QLineEdit()
         self.phone_input = QLineEdit()
@@ -64,15 +87,25 @@ class PhoneEditDialog(QDialog):
         form.addRow("Name:", self.name_input)
         form.addRow("Phone Number:", self.phone_input)
 
-        layout.addLayout(form)
+        root.addLayout(form)
 
+        # ---------------- Buttons ----------------
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         )
+
+        ok_btn = buttons.button(QDialogButtonBox.Ok)
+        ok_btn.setText("Save")
+        ok_btn.setProperty("role", "primary")
+
+        cancel_btn = buttons.button(QDialogButtonBox.Cancel)
+        cancel_btn.setProperty("role", "secondary")
+
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 
-        layout.addWidget(buttons)
+        root.addStretch()
+        root.addWidget(buttons)
 
     # -------------------------------------------------
     def get_data(self):
@@ -100,9 +133,10 @@ class AlertPhonesTab(QWidget):
     """
     Alert Contacts Management Tab
 
+    Responsibilities:
     - Model-specific alert phone list
     - Add / Edit / Delete contacts
-    - Read-only table (actions via buttons)
+    - Read-only table with action buttons
     """
 
     def __init__(self, parent=None):
@@ -113,27 +147,27 @@ class AlertPhonesTab(QWidget):
 
         self._build_ui()
         self._load_models()
+        apply_base_dialog_style(self)
 
     # -------------------------------------------------
+    # UI
+    # -------------------------------------------------
     def _build_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(16)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(28, 28, 28, 28)
+        root.setSpacing(20)
 
-        # -------------------------------------------------
-        # Title
-        # -------------------------------------------------
+        # ---------------- Header ----------------
         title = QLabel("Alert Contacts")
         title.setObjectName("SectionTitle")
-        layout.addWidget(title)
+        root.addWidget(title)
 
-        # -------------------------------------------------
-        # Model selector
-        # -------------------------------------------------
+        # ---------------- Model selector ----------------
         model_row = QHBoxLayout()
         model_row.setSpacing(12)
 
-        model_row.addWidget(QLabel("Model:"))
+        model_label = QLabel("Model:")
+        model_label.setMinimumWidth(60)
 
         self.model_combo = QComboBox()
         self.model_combo.setMinimumWidth(320)
@@ -141,26 +175,25 @@ class AlertPhonesTab(QWidget):
             self._on_model_changed
         )
 
+        model_row.addWidget(model_label)
         model_row.addWidget(self.model_combo)
         model_row.addStretch()
 
-        layout.addLayout(model_row)
+        root.addLayout(model_row)
 
-        # -------------------------------------------------
-        # Add button
-        # -------------------------------------------------
+        # ---------------- Add button ----------------
         btn_row = QHBoxLayout()
+
         self.add_btn = QPushButton("Add Contact")
         self.add_btn.setProperty("role", "primary")
         self.add_btn.clicked.connect(self._add_contact)
 
         btn_row.addWidget(self.add_btn)
         btn_row.addStretch()
-        layout.addLayout(btn_row)
 
-        # -------------------------------------------------
-        # Table
-        # -------------------------------------------------
+        root.addLayout(btn_row)
+
+        # ---------------- Table ----------------
         self.table = QTableWidget(0, 3)
         self.table.setObjectName("AlertContactsTable")
         self.table.setHorizontalHeaderLabels(
@@ -170,6 +203,7 @@ class AlertPhonesTab(QWidget):
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
+        self.table.setAlternatingRowColors(True)
         self.table.setShowGrid(False)
 
         header = self.table.horizontalHeader()
@@ -177,21 +211,21 @@ class AlertPhonesTab(QWidget):
         header.setSectionResizeMode(1, QHeaderView.Stretch)
         header.setSectionResizeMode(2, QHeaderView.Fixed)
 
-        self.table.setColumnWidth(2, 240)
+        self.table.setColumnWidth(2, 260)
 
-        layout.addWidget(self.table)
+        root.addWidget(self.table)
 
-        # -------------------------------------------------
-        # Status
-        # -------------------------------------------------
+        # ---------------- Status ----------------
         self.status_label = QLabel(
             "Select a model to manage alert contacts"
         )
         self.status_label.setObjectName("MutedText")
-        layout.addWidget(self.status_label)
 
-        layout.addStretch()
+        root.addWidget(self.status_label)
+        root.addStretch()
 
+    # -------------------------------------------------
+    # Data
     # -------------------------------------------------
     def _load_models(self):
         self.model_combo.clear()
@@ -251,8 +285,10 @@ class AlertPhonesTab(QWidget):
             actions_layout.addStretch()
 
             self.table.setCellWidget(row, 2, actions)
-            self.table.setRowHeight(row, 56)
+            self.table.setRowHeight(row, 60)
 
+    # -------------------------------------------------
+    # Actions
     # -------------------------------------------------
     def _add_contact(self):
         if not self.current_model_id:
