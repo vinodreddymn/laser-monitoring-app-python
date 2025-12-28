@@ -24,7 +24,7 @@ class PasswordModal(QDialog):
     """
 
     WIDTH = 380
-    HEIGHT = 200
+    HEIGHT = 300
 
     # -------------------------------------------------
     def __init__(self, parent=None):

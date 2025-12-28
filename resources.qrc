@@ -1,0 +1,18 @@
+<!-- resources.qrc -->
+<RCC>
+    <qresource prefix="/icons">
+        <file>icons/alert.svg</file>
+        <file>icons/check-circle.svg</file>
+        <file>icons/check.svg</file>
+        <file>icons/info.svg</file>
+        <file>icons/lock-open.svg</file>
+        <file>icons/pencil.svg</file>
+        <file>icons/play-circle.svg</file>
+        <file>icons/plus-circle.svg</file>
+        <file>icons/refresh.svg</file>
+        <file>icons/save.svg</file>
+        <file>icons/settings.svg</file>
+        <file>icons/trash.svg</file>
+        <file>icons/x-circle.svg</file>
+    </qresource>
+</RCC>
