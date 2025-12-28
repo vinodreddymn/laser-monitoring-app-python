@@ -5,6 +5,9 @@
 
 import json
 import os
+import logging
+
+log = logging.getLogger(__name__)
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 PURGE_SETTINGS_FILE = os.path.join(BASE_DIR, "purge_settings.json")

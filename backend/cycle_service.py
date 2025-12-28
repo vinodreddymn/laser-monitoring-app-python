@@ -47,7 +47,7 @@ def handle_detected_cycle(cycle: dict, signals):
 
             qr_text = qr.get("text")
             qr_image_path = qr.get("absolutePath")
-            qr_code_id = qr.get("id")
+            qr_code_id = qr.get("text")  # Use the QR text as ID for filename
 
             cycle["qr_text"] = qr_text
             cycle["qr_code_id"] = qr_code_id
@@ -98,6 +98,7 @@ def handle_detected_cycle(cycle: dict, signals):
             {
                 "id": cycle_id,
                 "qr_code": qr_text,
+                "qr_code_id": qr_code_id,  # Add QR ID for printing
                 "qr_image_path": qr_image_path,  # REQUIRED
                 "model_name": cycle.get("model_name", "UNKNOWN"),
                 "pass_fail": status,

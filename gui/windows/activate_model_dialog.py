@@ -9,99 +9,143 @@ from backend.models_dao import set_active_model
 
 
 class ActivateModelDialog(QDialog):
+    """
+    Activate Model Dialog – Production Safe
+
+    Purpose:
+    - Activate selected model
+    - Configure QR prefix & counter
+
+    Styling:
+    - styles/dialogs.qss
+    """
+
+    WIDTH = 500
+    HEIGHT = 400
+
     def __init__(self, parent=None, model=None):
         super().__init__(parent)
-        self.model = model
+        self.model = model or {}
 
-        self.setWindowTitle(f"Activate Model: {model['name']}")
-        self.resize(500, 400)
+        self.setObjectName("ActivateModelDialog")
+        self.setWindowTitle(f"Activate Model: {self.model.get('name', 'Unknown')}")
+        self.setFixedSize(self.WIDTH, self.HEIGHT)
 
-        self.load_settings()
-        self.setup_ui()
+        self._load_settings()
+        self._build_ui()
 
     # --------------------------------------------------
-    def load_settings(self):
-        s = get_settings()
+    def _load_settings(self):
+        s = get_settings() or {}
         self.qr_prefix = s.get("qr_text_prefix", "Part")
-        self.qr_counter = s.get("qr_start_counter", 1)
+        self.qr_counter = int(s.get("qr_start_counter", 1))
         self.model_type = self.model.get("model_type", "RHD")
 
     # --------------------------------------------------
-    def save_qr_settings(self):
+    def _save_qr_settings(self):
         save_settings({
             "qr_text_prefix": self.qr_prefix.strip(),
             "qr_start_counter": max(1, int(self.qr_counter)),
-            "model_type": self.model_type
+            "model_type": self.model_type,
         })
 
     # --------------------------------------------------
-    def get_next_qr(self):
+    def _get_next_qr(self) -> str:
         prefix = self.qr_prefix.strip() or "Text"
         return f"{prefix}.{str(self.qr_counter).zfill(5)}"
 
     # --------------------------------------------------
-    def setup_ui(self):
+    def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(20)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(18)
 
-        layout.addWidget(
-            QLabel(f"<h3>Activate Model: <b>{self.model['name']}</b> ({self.model_type})</h3>")
+        # --------------------------------------------------
+        # Title
+        # --------------------------------------------------
+        title = QLabel(
+            f"Activate Model: <b>{self.model.get('name', 'Unknown')}</b> "
+            f"[{self.model_type}]"
         )
+        title.setObjectName("DialogTitle")
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
 
+        # --------------------------------------------------
+        # Form
+        # --------------------------------------------------
         form = QFormLayout()
+        form.setSpacing(12)
+
         self.prefix_edit = QLineEdit(self.qr_prefix)
+        self.prefix_edit.setObjectName("QrPrefixInput")
+
         self.counter_edit = QLineEdit(str(self.qr_counter))
-        self.counter_edit.setMaximumWidth(120)
+        self.counter_edit.setObjectName("QrCounterInput")
+        self.counter_edit.setMaximumWidth(140)
 
         form.addRow("QR Text Prefix:", self.prefix_edit)
         form.addRow("Starting Counter:", self.counter_edit)
+
         layout.addLayout(form)
 
-        preview = QLabel()
-        preview.setAlignment(Qt.AlignCenter)
-        preview.setStyleSheet("""
-            background:#ecfdf5;
-            padding:20px;
-            border:2px dashed #10b981;
-            border-radius:12px;
-            margin:20px 0;
-            font-family:Consolas;
-            font-size:22px;
-            color:#065f46;
-        """)
-        layout.addWidget(preview)
+        # --------------------------------------------------
+        # Preview
+        # --------------------------------------------------
+        self.preview_lbl = QLabel()
+        self.preview_lbl.setObjectName("QrPreview")
+        self.preview_lbl.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.preview_lbl)
 
-        def update_preview():
-            self.qr_prefix = self.prefix_edit.text()
-            try:
-                self.qr_counter = int(self.counter_edit.text())
-            except:
-                self.qr_counter = 1
-            preview.setText(f"Next QR Code: <b>{self.get_next_qr()}</b>")
+        self.prefix_edit.textChanged.connect(self._update_preview)
+        self.counter_edit.textChanged.connect(self._update_preview)
+        self._update_preview()
 
-        self.prefix_edit.textChanged.connect(update_preview)
-        self.counter_edit.textChanged.connect(update_preview)
-        update_preview()
-
+        # --------------------------------------------------
+        # Buttons
+        # --------------------------------------------------
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
         )
-        buttons.button(QDialogButtonBox.Ok).setText("Activate & Save")
-        buttons.accepted.connect(self.activate)
+        buttons.setObjectName("DialogButtons")
+
+        ok_btn = buttons.button(QDialogButtonBox.Ok)
+        ok_btn.setText("Activate & Save")
+        ok_btn.setProperty("role", "primary")
+
+        cancel_btn = buttons.button(QDialogButtonBox.Cancel)
+        cancel_btn.setProperty("role", "secondary")
+
+        buttons.accepted.connect(self._activate)
         buttons.rejected.connect(self.reject)
+
         layout.addWidget(buttons)
 
     # --------------------------------------------------
-    def activate(self):
-        # 1️⃣ Save QR settings (merge-safe)
-        self.save_qr_settings()
+    def _update_preview(self):
+        self.qr_prefix = self.prefix_edit.text().strip()
 
-        # 2️⃣ Save active model to DB (ONLY place)
-        set_active_model(self.model["id"])
+        try:
+            self.qr_counter = int(self.counter_edit.text())
+        except ValueError:
+            self.qr_counter = 1
+
+        self.preview_lbl.setText(
+            f"Next QR Code: <b>{self._get_next_qr()}</b>"
+        )
+
+    # --------------------------------------------------
+    def _activate(self):
+        # 1️⃣ Save QR settings
+        self._save_qr_settings()
+
+        # 2️⃣ Activate model (single source of truth)
+        set_active_model(self.model.get("id"))
 
         QMessageBox.information(
             self,
-            "Success",
-            f"Activated: {self.model['name']}\nNext QR: {self.get_next_qr()}"
+            "Model Activated",
+            f"Activated: {self.model.get('name')}\n"
+            f"Next QR: {self._get_next_qr()}"
         )
-        super().accept()
+        self.accept()

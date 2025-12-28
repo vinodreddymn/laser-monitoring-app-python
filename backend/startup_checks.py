@@ -14,7 +14,7 @@ def check_database():
         log.info("DB check OK")
         return True
     except Exception as e:
-        log.error(f"DB check FAILED: {e}")
+        log.error("DB check FAILED: %s", e)
         return False
 
 
@@ -32,7 +32,7 @@ def check_gsm():
         log.info("GSM modem started")
         return True
     except Exception as e:
-        log.error(f"GSM init failed: {e}")
+        log.error("GSM init failed: %s", e)
         return False
 
 

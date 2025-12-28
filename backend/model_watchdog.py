@@ -5,9 +5,12 @@ import time
 import json
 import threading
 import copy
+import logging
 
 from backend.db import query
 from typing import Optional
+
+log = logging.getLogger(__name__)
 
 
 ACTIVE_MODEL_FILE = os.path.join(os.path.dirname(__file__), "active_model.json")
@@ -39,8 +42,8 @@ def _notify_listeners(model: dict):
     for cb in list(_listeners):
         try:
             cb(model)
-        except Exception as e:
-            print("⚠ model_watchdog: listener failed:", e)
+        except Exception:
+            log.exception("⚠ model_watchdog: listener failed")
 
 
 # ---------------------------------------------------
@@ -74,10 +77,10 @@ def _update_cache_and_notify(model: dict):
     try:
         with open(ACTIVE_MODEL_FILE, "w") as f:
             json.dump(model, f, indent=4)
-    except Exception as e:
-        print("⚠ model_watchdog: failed to write JSON:", e)
+    except Exception:
+        log.exception("⚠ model_watchdog: failed to write JSON")
 
-    print("🔁 model_watchdog: active model updated:", model)
+    log.info("🔁 model_watchdog: active model updated: %s", model)
     _notify_listeners(copy.deepcopy(model))
 
 
@@ -107,8 +110,8 @@ def _watch_active_model(poll_interval: float = 0.5):
                 if model:
                     _update_cache_and_notify(model)
 
-        except Exception as e:
-            print("⚠ model_watchdog: DB watch error:", e)
+        except Exception:
+            log.exception("⚠ model_watchdog: DB watch error")
 
         time.sleep(poll_interval)
 
@@ -124,7 +127,7 @@ def start_watchdog():
     _watchdog_started = True
     thread = threading.Thread(target=_watch_active_model, daemon=True)
     thread.start()
-    print("👀 model_watchdog: DB watchdog started")
+    log.info("👀 model_watchdog: DB watchdog started")
 
 
 # Auto-start

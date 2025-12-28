@@ -1,0 +1,146 @@
+/* ============================================================
+   BASE DIALOG STYLE (ALL DIALOGS)
+   ============================================================ */
+
+QDialog {
+    background-color: #0d1117;
+}
+
+QDialog QLabel {
+    color: #e5e7eb;
+}
+
+QDialog QLineEdit,
+QDialog QComboBox {
+    background-color: #020617;
+    border: 1px solid #475569;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: #e5e7eb;
+}
+
+QDialog QLineEdit:focus,
+QDialog QComboBox:focus {
+    border: 2px solid #3b82f6;
+}
+
+/* ============================================================
+   DIALOG BUTTONS (ROLE BASED)
+   ============================================================ */
+
+QDialog QPushButton {
+    border-radius: 8px;
+    padding: 6px 18px;
+    font-weight: 600;
+}
+
+QDialog QPushButton[role="primary"] {
+    background-color: #1d4ed8;
+    color: #ffffff;
+    border: 1px solid #3b82f6;
+}
+
+QDialog QPushButton[role="primary"]:hover {
+    background-color: #2563eb;
+}
+
+QDialog QPushButton[role="secondary"] {
+    background-color: #1f2937;
+    color: #e5e7eb;
+    border: 1px solid #475569;
+}
+
+QDialog QPushButton[role="secondary"]:hover {
+    background-color: #374151;
+}
+
+QDialog QPushButton[role="danger"] {
+    background-color: #b91c1c;
+    color: #ffffff;
+    border: 1px solid #dc2626;
+}
+
+QDialog QPushButton[role="danger"]:hover {
+    background-color: #dc2626;
+}
+
+/* ============================================================
+   PASSWORD DIALOG
+   ============================================================ */
+
+#PasswordDialog {
+    background-color: #0d1117;
+}
+
+#PasswordDialog QLabel#DialogTitle {
+    font-size: 16px;
+    font-weight: 700;
+    color: #e5e7eb;
+}
+
+#PasswordDialog QLineEdit#PasswordInput {
+    font-size: 14px;
+}
+
+/* ============================================================
+   ACTIVATE MODEL DIALOG
+   ============================================================ */
+
+#ActivateModelDialog {
+    background-color: #0d1117;
+}
+
+#ActivateModelDialog QLineEdit#QrPrefixInput,
+#ActivateModelDialog QLineEdit#QrCounterInput {
+    font-family: Consolas, monospace;
+}
+
+#ActivateModelDialog QLabel#QrPreview {
+    background-color: #020617;
+    border: 2px dashed #22c55e;
+    border-radius: 12px;
+    padding: 18px;
+    font-family: Consolas, monospace;
+    font-size: 20px;
+    color: #22c55e;
+}
+
+/* ============================================================
+   MODEL EDIT DIALOG
+   ============================================================ */
+
+#ModelEditDialog {
+    background-color: #0d1117;
+}
+
+#ModelEditDialog QLineEdit#ModelNameInput,
+#ModelEditDialog QLineEdit#LowerLimitInput,
+#ModelEditDialog QLineEdit#UpperLimitInput,
+#ModelEditDialog QComboBox#ModelTypeCombo {
+    font-size: 14px;
+}
+
+/* ============================================================
+   PHONE EDIT DIALOG
+   ============================================================ */
+
+#PhoneEditDialog {
+    background-color: #0d1117;
+}
+
+#PhoneEditDialog QLineEdit {
+    font-size: 14px;
+}
+
+/* ============================================================
+   QR SETTINGS PREVIEW (IF USED)
+   ============================================================ */
+
+#QRSettingsModal QLabel#QRPreview {
+    background-color: #020617;
+    border: 2px dashed #3b82f6;
+    border-radius: 10px;
+    padding: 18px;
+    font-family: Consolas, monospace;
+    color: #93c5fd;
+}

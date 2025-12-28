@@ -1,8 +1,11 @@
 # backend/detector.py
 from datetime import datetime
 import threading
+import logging
 
 from backend.model_watchdog import get_cached_model, register_listener
+
+log = logging.getLogger(__name__)
 
 
 class CycleDetector:
@@ -38,12 +41,14 @@ class CycleDetector:
                 "lower": float(model.get("lower_limit", 0)),
                 "upper": float(model.get("upper_limit", 100))
             }
-            print(
-                f"📌 Detector Active Model → ID {model.get('id')} | "
-                f"{self.model_limits['lower']}–{self.model_limits['upper']} mm"
+            log.info(
+                "📌 Detector Active Model → ID %s | %s–%s mm",
+                model.get('id'),
+                self.model_limits['lower'],
+                self.model_limits['upper'],
             )
         except Exception as e:
-            print("⚠ detector: failed to apply cached model:", e)
+                log.exception("⚠ detector: failed to apply cached model")
 
     # --------------------------------------------------
     def push(self, value: float):
@@ -86,10 +91,10 @@ class CycleDetector:
 
         if self.on_cycle_detected:
             try:
-                print("🔄 DETECTOR CYCLE:", cycle_data)
+                log.info("🔄 DETECTOR CYCLE: %s", cycle_data)
                 self.on_cycle_detected(cycle_data)
             except Exception as e:
-                print("⚠ detector: callback error:", e)
+                log.exception("⚠ detector: callback error")
 
         self._reset()
 
@@ -109,17 +114,19 @@ class CycleDetector:
                 "lower": float(model.get("lower_limit", model.get("lower", 0))),
                 "upper": float(model.get("upper_limit", model.get("upper", 100)))
             }
-            print(
-                f"📌 detector:update_model_limits → ID {model.get('id')} | "
-                f"{self.model_limits['lower']}–{self.model_limits['upper']} mm"
+            log.info(
+                "📌 detector:update_model_limits → ID %s | %s–%s mm",
+                model.get('id'),
+                self.model_limits['lower'],
+                self.model_limits['upper'],
             )
         except Exception as e:
-            print("⚠ detector: update_model_limits failed:", e)
+            log.exception("⚠ detector: update_model_limits failed")
 
     # --------------------------------------------------
     def update_threshold(self, value: float):
         self.threshold = float(value)
-        print("📌 Detector threshold set to:", self.threshold)
+        log.info("📌 Detector threshold set to: %s", self.threshold)
 
 
 # ======================================================
@@ -136,7 +143,7 @@ def init_detector(on_cycle_detected):
             detector = CycleDetector(on_cycle_detected=on_cycle_detected)
             register_listener(detector.update_model_limits)
             detector.update_threshold(1.0)
-            print("✅ Detector initialized.")
+            log.info("✅ Detector initialized.")
         else:
             detector.on_cycle_detected = on_cycle_detected
 
@@ -153,4 +160,4 @@ def update_threshold(value: float):
     if detector:
         detector.update_threshold(value)
     else:
-        print("⚠ detector not initialized; threshold not applied")
+        log.warning("⚠ detector not initialized; threshold not applied")

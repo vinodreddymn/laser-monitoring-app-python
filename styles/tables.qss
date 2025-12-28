@@ -1,0 +1,66 @@
+/* ============================================================
+   TABLE BASE
+   ============================================================ */
+
+QTableWidget {
+    background-color: #020617;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    gridline-color: #334155;
+    color: #e5e7eb;
+}
+
+QTableWidget::item {
+    padding: 8px;
+}
+
+QTableWidget::item:selected {
+    background-color: #1e293b;
+}
+
+/* ============================================================
+   TABLE HEADER
+   ============================================================ */
+
+QHeaderView::section {
+    background-color: #1e293b;
+    color: #e5e7eb;
+    padding: 10px;
+    font-weight: 600;
+    border: none;
+}
+
+/* ============================================================
+   MODELS TABLE
+   ============================================================ */
+
+#ModelsTable {
+    background-color: #020617;
+}
+
+/* NOTE:
+   Active / inactive row coloring MUST be handled in code.
+   Qt does NOT support item-level property selectors.
+*/
+
+/* ============================================================
+   ALERT CONTACTS TABLE
+   ============================================================ */
+
+#AlertContactsTable {
+    background-color: #020617;
+}
+
+/* Delete button inside table */
+#AlertContactsTable QPushButton[role="danger"] {
+    background-color: #7f1d1d;
+    border: 1px solid #dc2626;
+    color: white;
+    border-radius: 6px;
+    padding: 4px 14px;
+    font-weight: 600;
+}
+
+#AlertContactsTable QPushButton[role="danger"]:hover {
+    background-color: #dc2626;
+}

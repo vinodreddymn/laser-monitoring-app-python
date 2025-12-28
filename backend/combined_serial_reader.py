@@ -7,6 +7,9 @@ import time
 import threading
 from PySide6.QtCore import QObject, Signal
 from config.serial_ports import APP_READ_PORT, LASER_BAUD
+import logging
+
+log = logging.getLogger(__name__)
 
 
 class CombinedSerialReader(QObject):
@@ -37,7 +40,7 @@ class CombinedSerialReader(QObject):
     def _worker(self):
         while self.running:
             try:
-                print(f"🔌 Connecting to Combined Stream on {APP_READ_PORT}...")
+                log.info("🔌 Connecting to Combined Stream on %s...", APP_READ_PORT)
 
                 self.serial = serial.Serial(
                     APP_READ_PORT,
@@ -52,7 +55,7 @@ class CombinedSerialReader(QObject):
                 self.serial.setRTS(True)
 
                 self.status_changed.emit("CONNECTED")
-                print(f"✅ Combined COM connected → {APP_READ_PORT}")
+                log.info("✅ Combined COM connected → %s", APP_READ_PORT)
 
                 self.last_data_time = time.time()
 
@@ -104,13 +107,13 @@ class CombinedSerialReader(QObject):
                         raise
 
             except Exception as e:
-                print("❌ Combined COM disconnected:", e)
+                log.exception("❌ Combined COM disconnected: %s", e)
                 self.status_changed.emit("DISCONNECTED")
                 self._safe_close()
                 time.sleep(1.5)
 
         self._safe_close()
-        print("✅ Combined serial thread exited")
+        log.info("✅ Combined serial thread exited")
 
     # --------------------------------------------------
     def _safe_close(self):
@@ -129,13 +132,13 @@ class CombinedSerialReader(QObject):
 
                 del self.serial
         except Exception as e:
-            print("⚠️ COM close warning:", e)
+            log.warning("⚠️ COM close warning: %s", e)
 
         self.serial = None
 
     # --------------------------------------------------
     def stop(self):
-        print("🛑 Stopping Combined Serial Reader...")
+        log.info("🛑 Stopping Combined Serial Reader...")
         self.running = False
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=2.0)

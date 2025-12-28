@@ -42,7 +42,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 QR_FOLDER = BASE_DIR / "qr_images"
 VISUAL_SETTINGS_FILE = BASE_DIR / "backend" / "qr_generator.json"
 
-FONTS_DIR = Path(__file__).resolve().parent / "fonts"
+BASE_DIR = Path(__file__).resolve().parents[1]
+FONTS_DIR = BASE_DIR / "fonts"
+
 FONT_BOLD = FONTS_DIR / "Roboto-Bold.ttf"
 
 # ======================================================

@@ -1,0 +1,21 @@
+/* ============================================================
+   GLOBAL BASE (DUMMY / NEUTRAL)
+   DO NOT PUT REAL STYLING HERE
+   ============================================================ */
+
+/* Font baseline only */
+* {
+    font-family: "Segoe UI", "Arial", sans-serif;
+    font-size: 13px;
+}
+
+/* Neutral background – widgets override this themselves */
+QWidget {
+    background-color: #0b0f14;
+    color: #e5e7eb;
+}
+
+/* Remove default focus outlines (handled locally if needed) */
+*:focus {
+    outline: none;
+}

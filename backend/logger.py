@@ -8,11 +8,13 @@ import logging.handlers
 import os
 import sys
 
+from config.app_config import LOG_LEVEL, LOG_FORMAT, LOG_DATE_FORMAT, LOGS_DIR
+
 # ------------------------------------------------------
 # LOG DIRECTORY
 # ------------------------------------------------------
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-LOG_DIR = os.path.join(BASE_DIR, "logs")
+LOG_DIR = os.path.join(BASE_DIR, LOGS_DIR)
 os.makedirs(LOG_DIR, exist_ok=True)
 
 APP_LOG_FILE = os.path.join(LOG_DIR, "app.log")
@@ -31,10 +33,7 @@ def setup_logging():
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)
 
-    formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)-8s | %(name)s:%(lineno)d | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    formatter = logging.Formatter(LOG_FORMAT, datefmt=LOG_DATE_FORMAT)
 
     # -------------------------------
     # CONSOLE

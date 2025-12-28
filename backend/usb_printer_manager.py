@@ -1,39 +1,38 @@
-# backend/usb_printer_manager.py
 # ======================================================
-# USB / Virtual Label Printer Manager
+# backend/usb_printer_manager.py
+# USB / Virtual Label Printer Manager (SILENT PRINT)
 # ======================================================
 
 import time
 import logging
 from threading import Thread
-from typing import Optional
 from pathlib import Path
-from datetime import datetime
+from typing import Optional
 
 import win32print
+import win32ui
+from PIL import Image, ImageWin
+
 from PySide6.QtCore import QObject, Signal
 
-from backend.label_builder import build_zpl_label
-from backend.pdf_label_renderer import render_label_pdf
+from config.app_config import (
+    PRINTER_CHECK_INTERVAL,
+    EXCLUDED_PRINTERS,
+    DEFAULT_PRINTER_NAME
+)
 
 log = logging.getLogger(__name__)
-
-# ======================================================
-# CONFIGURATION
-# ======================================================
-
-PRINTER_NAME = "PDFCreator"   # Change to Zebra later
-CHECK_INTERVAL = 5.0
-EXCLUDED_PRINTERS = ("onenote",)
-
-PDF_OUTPUT_DIR = Path("prints")
 
 # ======================================================
 # SIGNALS
 # ======================================================
 
 class PrinterSignals(QObject):
-    printer_connected = Signal(bool)
+    """
+    Emits:
+        printer_status(bool connected, str printer_name)
+    """
+    printer_status = Signal(bool, str)
 
 
 printer_signals = PrinterSignals()
@@ -43,45 +42,171 @@ printer_signals = PrinterSignals()
 # ======================================================
 
 class USBLabelPrinter:
+    """
+    USB / Virtual Printer Manager
+
+    - Auto-detects printer
+    - Emits status changes
+    - Prints images silently using Win32 GDI
+    """
+
     def __init__(self):
-        self.printer_name = PRINTER_NAME
-        self.is_connected = False
+        self.printer_name: Optional[str] = None
+        self.is_connected: bool = False
         self.running = True
 
-        PDF_OUTPUT_DIR.mkdir(exist_ok=True)
-
-        Thread(
-            target=self._monitor,
-            daemon=True,
-            name="PrinterMonitor"
-        ).start()
+        Thread(target=self._monitor_loop, daemon=True).start()
+        self._check_once()
 
     # --------------------------------------------------
-    def _set_connected(self, state: bool):
-        if self.is_connected == state:
+    # PUBLIC API
+    # --------------------------------------------------
+    def emit_current_status(self):
+        """Re-emit last known printer status (used by UI on startup)"""
+        printer_signals.printer_status.emit(
+            self.is_connected,
+            self.printer_name if self.is_connected else ""
+        )
+
+    # --------------------------------------------------
+    def print_cycle(self, cycle_data: dict):
+        """
+        Print QR label image for a completed cycle
+        """
+        if not self.is_connected or not self.printer_name:
+            return False, "Printer not connected"
+
+        qr_id = cycle_data.get("qr_code_id") or cycle_data.get("qr_id")
+        if not qr_id:
+            return False, "QR ID missing in cycle data"
+
+        qr_path = Path(__file__).parent.parent / "qr_images" / f"{qr_id}.png"
+        if not qr_path.exists():
+            return False, f"QR image not found: {qr_path}"
+
+        try:
+            self._print_image(str(qr_path))
+            log.info(f"🖨 Printed QR label: {qr_id}")
+            return True, None
+        except Exception as e:
+            log.exception("Print failed")
+            return False, str(e)
+
+    # --------------------------------------------------
+    # SILENT PRINT (NO DIALOG)
+    # --------------------------------------------------
+    def _print_image(self, image_path: str):
+        """
+        Silent image printing using Win32 GDI
+        (NO print dialog, NO file association)
+        """
+        hPrinter = win32print.OpenPrinter(self.printer_name)
+
+        try:
+            hdc = win32ui.CreateDC()
+            hdc.CreatePrinterDC(self.printer_name)
+
+            hdc.StartDoc(image_path)
+            hdc.StartPage()
+
+            img = Image.open(image_path).convert("RGB")
+
+            printable_width  = hdc.GetDeviceCaps(8)   # HORZRES
+            printable_height = hdc.GetDeviceCaps(10)  # VERTRES
+
+            img_w, img_h = img.size
+            scale = min(
+                printable_width / img_w,
+                printable_height / img_h
+            )
+
+            draw_w = int(img_w * scale)
+            draw_h = int(img_h * scale)
+
+            x = int((printable_width  - draw_w) / 2)
+            y = int((printable_height - draw_h) / 2)
+
+            dib = ImageWin.Dib(img)
+            dib.draw(
+                hdc.GetHandleOutput(),
+                (x, y, x + draw_w, y + draw_h)
+            )
+
+            hdc.EndPage()
+            hdc.EndDoc()
+            hdc.DeleteDC()
+
+        finally:
+            win32print.ClosePrinter(hPrinter)
+
+    # --------------------------------------------------
+    # MONITORING
+    # --------------------------------------------------
+    def _emit(self, connected: bool, name: str = ""):
+        if self.is_connected == connected:
             return
 
-        self.is_connected = state
-        printer_signals.printer_connected.emit(state)
+        self.is_connected = connected
+        self.printer_name = name if connected else None
 
-        if state:
-            log.info("🟢 PRINTER CONNECTED → %s", self.printer_name)
-        else:
-            log.warning("🔴 PRINTER DISCONNECTED")
+        printer_signals.printer_status.emit(
+            connected,
+            name if connected else ""
+        )
+
+    # --------------------------------------------------
+    def _check_once(self):
+        try:
+            name = self._find_printer()
+            if not name:
+                raise RuntimeError
+            self._emit(True, name)
+        except Exception:
+            self._emit(False, "")
+
+    # --------------------------------------------------
+    def _monitor_loop(self):
+        log.info("🖨 Printer monitor started")
+        while self.running:
+            try:
+                name = self._find_printer()
+                if not name:
+                    raise RuntimeError
+                self._emit(True, name)
+            except Exception:
+                self._emit(False, "")
+            time.sleep(PRINTER_CHECK_INTERVAL)
 
     # --------------------------------------------------
     def _find_printer(self) -> Optional[str]:
-        printers = win32print.EnumPrinters(
-            win32print.PRINTER_ENUM_LOCAL |
-            win32print.PRINTER_ENUM_CONNECTIONS
-        )
+        """
+        Find a ready printer:
+        1) Prefer configured printer
+        2) Fallback to any ready printer
+        """
+        try:
+            printers = win32print.EnumPrinters(
+                win32print.PRINTER_ENUM_LOCAL |
+                win32print.PRINTER_ENUM_CONNECTIONS
+            )
 
-        for _, _, name, _ in printers:
-            lname = name.lower()
-            if any(x in lname for x in EXCLUDED_PRINTERS):
-                continue
-            if name == self.printer_name:
-                return name
+            # 1️⃣ Configured printer
+            if DEFAULT_PRINTER_NAME:
+                for _, _, name, _ in printers:
+                    if name == DEFAULT_PRINTER_NAME and self._is_ready(name):
+                        return name
+
+            # 2️⃣ Any suitable printer
+            for _, _, name, _ in printers:
+                lname = name.lower()
+                if any(x in lname for x in EXCLUDED_PRINTERS):
+                    continue
+                if self._is_ready(name):
+                    return name
+
+        except Exception as e:
+            log.warning(f"Printer enumeration failed: {e}")
+
         return None
 
     # --------------------------------------------------
@@ -94,86 +219,9 @@ class USBLabelPrinter:
         except Exception:
             return False
 
-    # --------------------------------------------------
-    def _monitor(self):
-        log.info("Printer monitor started")
-
-        while self.running:
-            try:
-                name = self._find_printer()
-                if not name or not self._is_ready(name):
-                    raise RuntimeError
-                self.printer_name = name
-                self._set_connected(True)
-            except Exception:
-                self._set_connected(False)
-
-            time.sleep(CHECK_INTERVAL)
-
-    # --------------------------------------------------
-    def print_cycle(self, cycle_row: dict):
-        """
-        Unified entry point:
-        - PDFCreator → PDF
-        - Zebra → RAW ZPL
-        """
-        if not self.is_connected:
-            return False, "PRINTER_OFFLINE"
-
-        if self.printer_name.lower() == "pdfcreator":
-            return self._print_pdf(cycle_row)
-        else:
-            return self._print_zpl(cycle_row)
-
-    # --------------------------------------------------
-    def _print_pdf(self, cycle_row: dict):
-        fname = (
-            f"{cycle_row['qr_code']}_"
-            f"{datetime.now():%Y%m%d_%H%M%S}.pdf"
-        )
-
-        output = PDF_OUTPUT_DIR / fname
-
-        render_label_pdf(
-            output_path=str(output),
-            label_image_path=cycle_row["qr_image_path"],  # ✅ absolute PNG path
-        )
-
-        log.info("📄 PDF LABEL SAVED → %s", output)
-        return True, None
-
-
-    # --------------------------------------------------
-    def _print_zpl(self, cycle_row: dict):
-        zpl = build_zpl_label(
-            qr_text=cycle_row["qr_code"],
-            model_name=cycle_row["model_name"],
-            result=cycle_row["pass_fail"]
-        )
-
-        try:
-            h = win32print.OpenPrinter(self.printer_name)
-            win32print.StartDocPrinter(h, 1, ("Label", None, "RAW"))
-            win32print.StartPagePrinter(h)
-            win32print.WritePrinter(h, zpl.encode("utf-8"))
-            win32print.EndPagePrinter(h)
-            win32print.EndDocPrinter(h)
-            win32print.ClosePrinter(h)
-
-            log.info("🏷 LABEL SENT TO PRINTER")
-            return True, None
-
-        except Exception as e:
-            log.error("Print failed: %s", e)
-            return False, str(e)
-
-    # --------------------------------------------------
-    def stop(self):
-        self.running = False
-
 
 # ======================================================
-# SINGLETON
+# SINGLETON INSTANCE
 # ======================================================
 
 usb_printer = USBLabelPrinter()

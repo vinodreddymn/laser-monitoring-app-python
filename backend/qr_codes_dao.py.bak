@@ -46,5 +46,5 @@ def delete_old_qr_codes(days_old: int = 1) -> int:
             query("DELETE FROM qr_codes WHERE id = %s", (row["id"],))
             deleted += 1
         except Exception as e:
-            log.warning("Failed to delete QR %s: %s", row['id'], e)
+            logging.warning(f"Failed to delete QR {row['id']}: {e}")
     return deleted

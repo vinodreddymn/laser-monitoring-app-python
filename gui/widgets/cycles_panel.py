@@ -8,24 +8,58 @@ from PySide6.QtCore import Qt
 
 class CyclesPanel(QFrame):
     """
-    Redesigned Latest Cycles Panel - Pure Display Only
+    Latest Cycles Panel – Production Final (Mode Aware)
 
-    - Fixed height, no scrolling, no interaction
-    - Shows up to 8 most recent cycles (newest on top)
-    - Clear info: Status (PASS/FAIL), Model, Timestamp, QR Text (only on PASS)
-    - Compact cards with strong left accent bar
-    - Matches dark professional theme
+    - Fixed height (no scrolling, no interaction)
+    - Kiosk-aware sizing
+    - Shows recent cycles (newest on top)
+    - PASS / FAIL with strong visual priority
+    - QR shown only for PASS
+    - Deterministic layout (no jumps, no stretch gaps)
     """
 
-    MAX_CYCLES = 8
-    CARD_HEIGHT = 84                   # Reduced height to fit 8 cards comfortably
-    PANEL_HEIGHT = 120 + (MAX_CYCLES * CARD_HEIGHT) + (MAX_CYCLES - 1) * 10  # title + cards + spacing
+    TITLE_HEIGHT = 36
+    PANEL_PADDING_V = 14
+    PANEL_PADDING_H = 16
 
-    def __init__(self, parent=None):
+    # --------------------------------------------------
+    # Init
+    # --------------------------------------------------
+    def __init__(self, kiosk_mode: bool = False, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(self.PANEL_HEIGHT)
+
+        self.kiosk_mode = kiosk_mode
+        self._apply_mode()
         self._build_ui()
 
+    # --------------------------------------------------
+    # Mode configuration
+    # --------------------------------------------------
+    def _apply_mode(self):
+        """
+        Adjust panel density based on kiosk / windowed mode
+        """
+        if self.kiosk_mode:
+            self.MAX_CYCLES = 9
+            self.CARD_HEIGHT = 89
+            self.CARD_SPACING = 9
+        else:
+            self.MAX_CYCLES = 9
+            self.CARD_HEIGHT = 86
+            self.CARD_SPACING = 9
+
+        self.PANEL_HEIGHT = (
+            self.TITLE_HEIGHT
+            + (self.MAX_CYCLES * self.CARD_HEIGHT)
+            + ((self.MAX_CYCLES - 1) * self.CARD_SPACING)
+            + (self.PANEL_PADDING_V * 2)
+        )
+
+        self.setFixedHeight(self.PANEL_HEIGHT)
+
+    # --------------------------------------------------
+    # UI
+    # --------------------------------------------------
     def _build_ui(self):
         self.setStyleSheet("""
             QFrame {
@@ -36,121 +70,138 @@ class CyclesPanel(QFrame):
         """)
 
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(18, 18, 18, 18)
-        self.layout.setSpacing(14)
+        self.layout.setContentsMargins(
+            self.PANEL_PADDING_H,
+            self.PANEL_PADDING_V,
+            self.PANEL_PADDING_H,
+            self.PANEL_PADDING_V,
+        )
+        self.layout.setSpacing(10)
 
-        # Title
+        # -------- Title --------
         title = QLabel("Latest Cycles")
-        title.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        title.setFixedHeight(self.TITLE_HEIGHT)
+        title.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        title.setFont(QFont("Segoe UI", 15, QFont.Bold))
         title.setStyleSheet("color: #58a6ff;")
         self.layout.addWidget(title)
 
-        # Container for cycle cards
+        # -------- Cards container --------
         self.card_container = QVBoxLayout()
-        self.card_container.setSpacing(10)  # Tighter spacing between cards
+        self.card_container.setSpacing(self.CARD_SPACING)
         self.card_container.setContentsMargins(0, 0, 0, 0)
         self.layout.addLayout(self.card_container)
 
+    # --------------------------------------------------
+    # Update cycles
+    # --------------------------------------------------
     def update_cycles(self, cycles: list):
-        # Clear existing cards
         while self.card_container.count():
             item = self.card_container.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
         if not cycles:
-            empty = QLabel("No cycles recorded yet")
+            empty = QLabel("No cycles recorded")
             empty.setAlignment(Qt.AlignCenter)
-            empty.setStyleSheet("color: #555555; font-size: 15px; font-style: italic;")
-            empty.setFixedHeight(self.MAX_CYCLES * self.CARD_HEIGHT + (self.MAX_CYCLES - 1) * 10)
+            empty.setFont(QFont("Segoe UI", 13, QFont.Italic))
+            empty.setStyleSheet("color:#6b7280;")
+            empty.setFixedHeight(
+                self.MAX_CYCLES * self.CARD_HEIGHT
+                + (self.MAX_CYCLES - 1) * self.CARD_SPACING
+            )
             self.card_container.addWidget(empty)
             return
 
-        # Sort newest first
         cycles = sorted(
             cycles,
-            key=lambda c: datetime.fromisoformat(str(c.get("timestamp", "1900-01-01")).replace("Z", "+00:00")),
+            key=lambda c: datetime.fromisoformat(
+                str(c.get("timestamp", "1900-01-01")).replace("Z", "+00:00")
+            ),
             reverse=True,
         )
 
-        recent_cycles = cycles[:self.MAX_CYCLES]
+        recent = cycles[:self.MAX_CYCLES]
 
-        for cycle in recent_cycles:
+        for cycle in recent:
             self.card_container.addWidget(self._create_card(cycle))
 
-        # Fill remaining slots with invisible spacers to keep fixed height
-        displayed = len(recent_cycles)
-        for _ in range(self.MAX_CYCLES - displayed):
+        # Fill remaining slots to keep height stable
+        for _ in range(self.MAX_CYCLES - len(recent)):
             spacer = QFrame()
             spacer.setFixedHeight(self.CARD_HEIGHT)
             self.card_container.addWidget(spacer)
 
+    # --------------------------------------------------
+    # Card
+    # --------------------------------------------------
     def _create_card(self, cycle: dict) -> QFrame:
-        status = (cycle.get("pass_fail") or "").strip().upper()
+        status = (cycle.get("pass_fail") or "").upper()
         is_pass = status == "PASS"
 
-        accent_color = "#00ffaa" if is_pass else "#ff4444"
-        text_color = "#ffffff"
-        secondary_color = "#aaaaaa"
+        accent = "#00f5a0" if is_pass else "#ff4d4f"
+        fg_main = "#e5e7eb"
+        fg_muted = "#9ca3af"
 
         card = QFrame()
         card.setFixedHeight(self.CARD_HEIGHT)
         card.setStyleSheet(f"""
             QFrame {{
-                background: #11191f;
-                border-radius: 9px;
-                border-left: 7px solid {accent_color};
-                border: 1px solid #222222;
+                background: #111827;
+                border-radius: 10px;
+                border-left: 6px solid {accent};
+                border: 1px solid #1f2937;
             }}
         """)
 
         layout = QHBoxLayout(card)
-        layout.setContentsMargins(15, 10, 15, 10)
-        layout.setSpacing(16)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(14)
 
-        # Left: Status, Model, Timestamp
-        left_layout = QVBoxLayout()
-        left_layout.setSpacing(3)
+        # ----- LEFT -----
+        left = QVBoxLayout()
+        left.setSpacing(2)
 
-        # Status
         status_lbl = QLabel(status or "—")
-        status_lbl.setFont(QFont("Segoe UI", 16, QFont.Bold))
-        status_lbl.setStyleSheet(f"color: {accent_color};")
-        left_layout.addWidget(status_lbl)
+        status_lbl.setFont(QFont("Segoe UI", 15, QFont.Bold))
+        status_lbl.setStyleSheet(f"color:{accent};")
+        left.addWidget(status_lbl)
 
-        # Model
-        model = cycle.get("model_name") or "Unknown Model"
-        model_lbl = QLabel(model)
+        model_lbl = QLabel(cycle.get("model_name") or "Unknown")
         model_lbl.setFont(QFont("Segoe UI", 12))
-        model_lbl.setStyleSheet(f"color: {text_color};")
-        left_layout.addWidget(model_lbl)
+        model_lbl.setStyleSheet(f"color:{fg_main};")
+        left.addWidget(model_lbl)
 
-        # Timestamp
-        timestamp = self._format_timestamp(cycle.get("timestamp"))
-        time_lbl = QLabel(timestamp)
+        time_lbl = QLabel(self._format_timestamp(cycle.get("timestamp")))
         time_lbl.setFont(QFont("Segoe UI", 10))
-        time_lbl.setStyleSheet(f"color: {secondary_color};")
-        left_layout.addWidget(time_lbl)
+        time_lbl.setStyleSheet(f"color:{fg_muted};")
+        left.addWidget(time_lbl)
 
-        layout.addLayout(left_layout, stretch=1)
+        layout.addLayout(left, stretch=1)
 
-        # Right: QR Text or failure message
+        # ----- RIGHT -----
         if is_pass:
-            qr_text = cycle.get("qr_text") or cycle.get("qr_code") or "—"
-            qr_lbl = QLabel(qr_text)
-            qr_lbl.setFont(QFont("Consolas", 17, QFont.Bold))
-            qr_lbl.setStyleSheet("color: #00ffaa;")
-            qr_lbl.setWordWrap(False)
+            qr_value = (
+                cycle.get("qr_text")
+                or cycle.get("qr_code")
+                or cycle.get("qr")
+                or "—"
+            )
+            qr = QLabel(qr_value)
+            qr.setFont(QFont("Consolas", 16, QFont.Bold))
+            qr.setStyleSheet("color:#00f5a0;")
+            qr.setWordWrap(False)
         else:
-            qr_lbl = QLabel("No QR generated")
-            qr_lbl.setFont(QFont("Segoe UI", 13))
-            qr_lbl.setStyleSheet("color: #f85149; font-style: italic;")
+            qr = QLabel("No QR generated")
+            qr.setFont(QFont("Segoe UI", 12))
+            qr.setStyleSheet("color:#f87171; font-style:italic;")
 
-        qr_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        layout.addWidget(qr_lbl, stretch=2)
+        qr.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        layout.addWidget(qr, stretch=2)
 
         return card
 
+    # --------------------------------------------------
     @staticmethod
     def _format_timestamp(ts) -> str:
         if not ts:
@@ -160,6 +211,6 @@ class CyclesPanel(QFrame):
                 dt = ts
             else:
                 dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
-            return dt.strftime("%d %b %Y %H:%M:%S")
+            return dt.strftime("%d %b %Y  %H:%M:%S")
         except Exception:
-            return "Invalid timestamp"
+            return "Invalid time"

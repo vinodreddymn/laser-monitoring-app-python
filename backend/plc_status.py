@@ -1,123 +1,185 @@
-# backend/plc_status.py — FINAL INDUSTRIAL SAFE VERSION (WINDOWS FIXED)
+# ======================================================
+# backend/plc_status.py
+# FINAL – Industrial Safe PLC Status Listener (Windows)
+# ======================================================
 
-from PySide6.QtCore import QThread, Signal, QObject
-import serial, re, time
-from config.serial_ports import APP_READ_PORT, PLC_BAUD
+from PySide6.QtCore import QObject, QThread, Signal
+import serial
+import re
+import time
+import json
+import logging
+from pathlib import Path
 
+from config.app_config import (
+    DEFAULT_BAUD_PLC,
+    SERIAL_TIMEOUT,
+    SERIAL_WRITE_TIMEOUT,
+    PLC_POLL_INTERVAL
+)
+
+log = logging.getLogger(__name__)
+
+# ======================================================
+# CONFIG
+# ======================================================
+
+CONFIG_FILE = Path(__file__).parent / "peripherals_config.json"
+
+def load_config():
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE, "r") as f:
+            return json.load(f)
+    return {"plc_port": "COM6"}
+
+config = load_config()
+
+PLC_PORT = config.get("plc_port", "COM6")
+PLC_BAUD = DEFAULT_BAUD_PLC
+
+
+# ======================================================
+# WORKER (runs in QThread)
+# ======================================================
 
 class _PLCWorker(QObject):
     status_ready = Signal(dict)
 
-    def __init__(self, port):
+    def __init__(self, port: str):
         super().__init__()
         self.port = port
         self.running = False
-        self.serial = None
+        self.ser = None
 
     # --------------------------------------------------
     def run(self):
         self.running = True
-        pattern = re.compile(r'PLC:(ON|OFF),(\w+)')
+        pattern = re.compile(r"PLC:(ON|OFF),(\w+)")
 
         while self.running:
             try:
-                print(f"🔌 Connecting to PLC on {self.port}...")
+                log.info("🔌 Connecting to PLC on %s", self.port)
 
-                self.serial = serial.Serial(
+                self.ser = serial.Serial(
                     self.port,
                     PLC_BAUD,
-                    timeout=0.2,
-                    write_timeout=0.2
+                    timeout=SERIAL_TIMEOUT,
+                    write_timeout=SERIAL_WRITE_TIMEOUT
                 )
 
-                # ✅ HARD DRIVER RESET (WINDOWS FIX)
-                self.serial.reset_input_buffer()
-                self.serial.reset_output_buffer()
-                self.serial.setDTR(True)
-                self.serial.setRTS(True)
+                # ✅ Windows COM stabilization
+                self.ser.reset_input_buffer()
+                self.ser.reset_output_buffer()
+                self.ser.setDTR(True)
+                self.ser.setRTS(True)
 
-                print(f"✅ PLC connected → {self.port}")
+                log.info("🟢 PLC connected")
 
-                while self.running:
-                    try:
-                        if self.serial.in_waiting > 0:
-                            line = self.serial.readline().decode(errors='ignore').strip()
-                            if not line:
-                                continue
+                while self.running and self.ser and self.ser.is_open:
+                    if self.ser.in_waiting > 0:
+                        line = self.ser.readline().decode(
+                            errors="ignore"
+                        ).strip()
 
-                            m = pattern.search(line)
-                            if m:
-                                self.status_ready.emit({
-                                    "power": m.group(1) == "ON",
-                                    "status": m.group(2)
-                                })
+                        if not line:
+                            continue
 
-                    except Exception:
-                        raise   # force reconnect + cleanup
+                        match = pattern.search(line)
+                        if match:
+                            self.status_ready.emit({
+                                "power": match.group(1) == "ON",
+                                "status": match.group(2)
+                            })
+
+                    time.sleep(0.05)
 
             except Exception as e:
-                print("❌ PLC disconnected:", e)
+                log.error("🔴 PLC error: %s", e)
                 self._safe_close()
                 time.sleep(1.5)
 
-        # ✅ FINAL CLEAN EXIT
         self._safe_close()
-        print("✅ PLC thread exited cleanly")
+        log.info("🛑 PLC worker stopped")
 
     # --------------------------------------------------
     def _safe_close(self):
         try:
-            if self.serial:
+            if self.ser:
                 try:
-                    self.serial.reset_input_buffer()
-                    self.serial.reset_output_buffer()
-                except:
+                    self.ser.reset_input_buffer()
+                    self.ser.reset_output_buffer()
+                except Exception:
                     pass
 
-                if self.serial.is_open:
-                    self.serial.setDTR(False)
-                    self.serial.setRTS(False)
-                    self.serial.close()
-
-                del self.serial
+                if self.ser.is_open:
+                    self.ser.setDTR(False)
+                    self.ser.setRTS(False)
+                    self.ser.close()
         except Exception as e:
-            print("⚠️ PLC COM close warning:", e)
+            log.warning("⚠️ PLC close warning: %s", e)
 
-        self.serial = None
+        self.ser = None
 
     # --------------------------------------------------
     def stop(self):
-        print("🛑 Stopping PLC Worker...")
         self.running = False
         self._safe_close()
 
 
+# ======================================================
+# LISTENER (UI-facing)
+# ======================================================
+
 class PLCListener(QObject):
-    status_updated = Signal(dict)
+    """
+    Public API:
+    - plc_status_changed(dict)
+    - emit_current_status()
+    - start() / stop()
+    """
+
+    plc_status_changed = Signal(dict)
 
     def __init__(self):
         super().__init__()
-        self.thread = QThread()
-        self.worker = _PLCWorker(APP_READ_PORT)
+
+        self.last_status = {
+            "power": False,
+            "status": "OFFLINE"
+        }
+
+        self.thread = QThread(self)
+        self.worker = _PLCWorker(PLC_PORT)
         self.worker.moveToThread(self.thread)
 
-        self.worker.status_ready.connect(self.status_updated)
+        self.worker.status_ready.connect(self._on_status_ready)
         self.thread.started.connect(self.worker.run)
 
+    # --------------------------------------------------
+    def _on_status_ready(self, status: dict):
+        self.last_status = status
+        self.plc_status_changed.emit(status)
+
+    # --------------------------------------------------
+    def emit_current_status(self):
+        self.plc_status_changed.emit(self.last_status)
+
+    # --------------------------------------------------
     def start(self):
         if not self.thread.isRunning():
             self.thread.start()
+            log.info("PLC listener started")
 
+    # --------------------------------------------------
     def stop(self):
-        print("🛑 Stopping PLC Listener...")
+        log.info("Stopping PLC listener...")
         self.worker.stop()
         self.thread.quit()
         self.thread.wait(2000)
 
 
+# ======================================================
+# SINGLETON
+# ======================================================
+
 plc_listener = PLCListener()
-
-
-def init_plc_listener(callback):
-    plc_listener.status_updated.connect(callback)
-    plc_listener.start()

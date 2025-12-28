@@ -2,7 +2,10 @@
 
 import json
 import os
+import logging
 from .db import query
+
+log = logging.getLogger(__name__)
 
 ACTIVE_MODEL_FILE = os.path.join(os.path.dirname(__file__), "active_model.json")
 
@@ -106,9 +109,9 @@ def set_active_model(model_id: int):
     try:
         with open(ACTIVE_MODEL_FILE, "w") as f:
             json.dump(model, f, indent=4)
-        print(f"✅ Active model cached: {ACTIVE_MODEL_FILE}")
-    except Exception as e:
-        print("⚠ Failed to write active model JSON:", e)
+        log.info("✅ Active model cached: %s", ACTIVE_MODEL_FILE)
+    except Exception:
+        log.exception("⚠ Failed to write active model JSON")
 
 
 def get_active_model() -> dict:

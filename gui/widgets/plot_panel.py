@@ -95,6 +95,12 @@ class PlotPanel(QFrame):
         self.plot = pg.PlotWidget(background="#0a0f1a")
         self.plot.showGrid(x=True, y=True, alpha=0.3)
         self.plot.setLabel("left", "Laser Height (mm)")
+
+        y_axis = self.plot.getAxis("left")
+        y_axis.setStyle(tickFont=QFont("Segoe UI", 11))
+        y_axis.label.setFont(QFont("Segoe UI", 13, QFont.Bold))
+        y_axis.setTextPen("#e6edf3")
+
         self.plot.setLabel("bottom", "")
 
         self.plot.setMouseEnabled(False, False)
@@ -131,18 +137,24 @@ class PlotPanel(QFrame):
         self.badge_frame = QFrame()
         self.badge_frame.setStyleSheet("""
             QFrame {
-                background:#0d1117;
-                border-radius:6px;
-                border:1px solid #30363d;
+                background: qlineargradient(
+                    x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #0f1622,
+                    stop:1 #0b1220
+                );
+                border-radius: 8px;
+                border: 1px solid #2d3b4f;
             }
             QLabel {
-                color:#e6edf3;
+                background: transparent;
+                color: #e6edf3;
             }
         """)
 
+
         badge_layout = QHBoxLayout(self.badge_frame)
-        badge_layout.setContentsMargins(8, 6, 8, 6)
-        badge_layout.setSpacing(8)
+        badge_layout.setContentsMargins(12, 8, 12, 8)
+        badge_layout.setSpacing(10)
 
         self.badge_label = QLabel("")
         self.badge_label.setFont(QFont("Segoe UI", 13))
@@ -285,21 +297,22 @@ class PlotPanel(QFrame):
         upper = self.upper if self.upper is not None else 0.0
 
         model_html = (
-            f"<span style='font-size:26px; font-weight:800; color:#58a6ff;'>"
+            f"<span style='font-size:24px; font-weight:800; color:#58a6ff;'>"
             f"{self.model_name}</span>"
         )
 
         type_html = (
-            f"<span style='font-size:22px; font-weight:600; color:#ffa657;'>"
+            f"<span style='font-size:20px; font-weight:600; color:#ffa657;'>"
             f" &nbsp;[{self.model_type}]</span>"
         )
 
         limits_html = (
-            f"<span style='font-size:20px; color:#9da7b1;'>"
+            f"<span style='font-size:18px; color:#9da7b1;'>"
             f" | Min: {lower:.2f} mm"
             f" | Max: {upper:.2f} mm"
             f"</span>"
         )
+
 
         if self.current_value is None:
             current_html = (
@@ -369,5 +382,3 @@ class PlotPanel(QFrame):
 
             # Re-center on resize
             view.sigResized.connect(update_watermark)
-
-

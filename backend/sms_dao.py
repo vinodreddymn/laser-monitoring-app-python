@@ -1,50 +1,87 @@
 # ======================================================
+# backend/sms_dao.py
 # SMS Queue Data Access Layer (PRODUCTION SAFE)
 # ======================================================
 
 from datetime import datetime
 from typing import List, Dict
+import logging
 
 from .db import query
 from backend.model_watchdog import get_cached_model, register_listener
 from .alert_phones_dao import get_all_alert_contacts
 
+log = logging.getLogger(__name__)
 
 # ======================================================
-# LOCAL MODEL CACHE (USED FOR SMS FORMATTING)
+# LOCAL MODEL CACHE (FOR SMS CONTENT)
 # ======================================================
 _SMS_MODEL_CACHE = {
     "id": None,
     "name": None,
+    "type": None,
     "lower": None,
     "upper": None,
 }
 
-
 # ======================================================
-# INTERNAL HELPERS
+# INTERNAL TIME HELPERS
 # ======================================================
-def _format_timestamp(value) -> str:
+def _format_db_timestamp(value) -> str:
     """
-    Convert ISO / datetime / unknown into MySQL DATETIME string.
+    Normalize timestamp to MySQL DATETIME (YYYY-MM-DD HH:MM:SS)
     """
     try:
         if isinstance(value, datetime):
             dt = value
         else:
-            dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            dt = datetime.fromisoformat(
+                str(value).replace("Z", "+00:00")
+            )
     except Exception:
         dt = datetime.now()
 
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
-# ======================================================
-# WATCHDOG → CACHE UPDATE
-# ======================================================
-def _update_local_cache(model: dict):
+def _format_date_only(value) -> str:
     """
-    Keeps an always-fresh model cache for SMS formatting.
+    DD-MM-YYYY (SMS friendly)
+    """
+    try:
+        if isinstance(value, datetime):
+            dt = value
+        else:
+            dt = datetime.fromisoformat(
+                str(value).replace("Z", "+00:00")
+            )
+        return dt.strftime("%d-%m-%Y")
+    except Exception:
+        return "Unknown"
+
+
+def _format_time_only(value) -> str:
+    """
+    HH:MM:SS (SMS friendly)
+    """
+    try:
+        if isinstance(value, datetime):
+            dt = value
+        else:
+            dt = datetime.fromisoformat(
+                str(value).replace("Z", "+00:00")
+            )
+        return dt.strftime("%H:%M:%S")
+    except Exception:
+        return "Unknown"
+
+
+# ======================================================
+# MODEL WATCHDOG → CACHE
+# ======================================================
+def _update_model_cache(model: dict):
+    """
+    Keep latest active model details for SMS formatting.
     """
     if not model:
         return
@@ -52,6 +89,8 @@ def _update_local_cache(model: dict):
     try:
         _SMS_MODEL_CACHE["id"] = model.get("id")
         _SMS_MODEL_CACHE["name"] = model.get("name")
+        _SMS_MODEL_CACHE["type"] = model.get("model_type", "NA")
+
         _SMS_MODEL_CACHE["lower"] = float(
             model.get("lower_limit", model.get("lower", 0.0))
         )
@@ -59,34 +98,33 @@ def _update_local_cache(model: dict):
             model.get("upper_limit", model.get("upper", 0.0))
         )
 
-        print("sms_dao: active model cache updated:", _SMS_MODEL_CACHE)
+        log.info("SMS model cache updated: %s", _SMS_MODEL_CACHE)
 
-    except Exception as e:
-        print("sms_dao: cache update failed:", e)
+    except Exception:
+        log.exception("SMS model cache update failed")
 
 
 # Register watchdog listener
-register_listener(_update_local_cache)
+register_listener(_update_model_cache)
 
 # Prime cache on startup
 try:
-    _update_local_cache(get_cached_model())
+    _update_model_cache(get_cached_model())
 except Exception:
     pass
 
 
 # ======================================================
-# MAIN API — QUEUE FAIL SMS
+# PUBLIC API — QUEUE SMS
 # ======================================================
 def queue_sms_by_model(model_id: int, cycle: dict):
     """
-    Queue FAIL SMS for all alert contacts linked to a model.
+    Queue operator-safe SMS for all alert contacts
+    when an abnormal cycle is detected.
 
-    Stores:
-    - name
-    - phone
-    - message
-    - retry metadata
+    NOTE:
+    - SMS is best-effort notification
+    - Delivery depends on operator & DND
     """
 
     contacts = get_all_alert_contacts(model_id)
@@ -94,48 +132,56 @@ def queue_sms_by_model(model_id: int, cycle: dict):
         return
 
     # -------------------------------
-    # MODEL NAME
+    # MODEL DETAILS
     # -------------------------------
     model_name = (
         cycle.get("model_name")
         or _SMS_MODEL_CACHE.get("name")
-        or "Unknown"
+        or "LINE"
     )
 
-    # -------------------------------
-    # TIME
-    # -------------------------------
-    try:
-        ts_obj = datetime.fromisoformat(
-            str(cycle.get("timestamp")).replace("Z", "+00:00")
-        )
-        time_str = ts_obj.strftime("%H:%M:%S")
-    except Exception:
-        time_str = "Unknown"
+    model_type = _SMS_MODEL_CACHE.get("type", "NA")
+
+    # Remove spaces from model name for SMS safety
+    model_name = model_name.replace(" ", "")
 
     # -------------------------------
-    # RANGE & PEAK
+    # MEASUREMENT VALUES
     # -------------------------------
-    lower = _SMS_MODEL_CACHE.get("lower")
-    upper = _SMS_MODEL_CACHE.get("upper")
     peak = float(cycle.get("peak_height", 0.0))
 
+    lower = _SMS_MODEL_CACHE.get("lower")
+    upper = _SMS_MODEL_CACHE.get("upper")
+
     if lower is not None and upper is not None:
-        range_text = f"{lower:.2f}–{upper:.2f}"
+        range_text = f"{lower:.2f} - {upper:.2f} mm"
     else:
-        range_text = "N/A"
+        range_text = "NA"
 
     # -------------------------------
-    # FINAL SMS TEXT (SINGLE SMS)
+    # DATE & TIME
     # -------------------------------
-    message = (
-        f"FAIL | {model_name} | "
-        f"{peak:.2f}mm (Range: {range_text}) | {time_str}"
+    date_str = _format_date_only(
+        cycle.get("timestamp", datetime.now())
     )
 
-    # DB timestamp
-    db_ts = _format_timestamp(
+    time_str = _format_time_only(
         cycle.get("timestamp", datetime.now())
+    )
+
+    db_timestamp = _format_db_timestamp(
+        cycle.get("timestamp", datetime.now())
+    )
+
+    # -------------------------------
+    # OPERATOR-SAFE SINGLE-LINE SMS
+    # -------------------------------
+    message = (
+        f"NTF QC Fail Alert: "
+        f"{model_name} ({model_type}) ({range_text}) - "
+        f"Weld depth {peak:.2f} mm "
+        f"on {date_str} at {time_str}. "
+        f"Info by ASHTECH"
     )
 
     # -------------------------------
@@ -155,7 +201,13 @@ def queue_sms_by_model(model_id: int, cycle: dict):
             VALUES
                 (%s, %s, %s, %s, 'pending', 0)
             """,
-            (db_ts, name, phone, message),
+            (db_timestamp, name, phone, message),
+        )
+
+        log.info(
+            "SMS queued → %s (%s)",
+            name or "User",
+            phone,
         )
 
 
@@ -225,7 +277,11 @@ def increment_sms_retry(sms_id: int, error: str) -> int:
     )
 
     row = query(
-        "SELECT retry_count FROM sms_queue WHERE id = %s",
+        """
+        SELECT retry_count
+        FROM sms_queue
+        WHERE id = %s
+        """,
         (sms_id,),
         fetch_one=True,
     )

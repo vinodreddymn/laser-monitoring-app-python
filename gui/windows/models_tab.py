@@ -5,13 +5,13 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox
 )
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QFont
 
 from backend.models_dao import (
     get_models,
-    add_model,
-    update_model,
     delete_model,
-    set_active_model as db_set_active_model
+    set_active_model as db_set_active_model,
+    get_active_model
 )
 
 from .model_edit_dialog import ModelEditDialog
@@ -19,186 +19,225 @@ from .activate_model_dialog import ActivateModelDialog
 
 
 class ModelsTab(QWidget):
-    # ✅ SIGNALS REQUIRED BY SettingsWindow
+    """
+    Models Management Tab
+
+    Responsibilities:
+    - List QC models
+    - Add / edit / delete models
+    - Activate exactly ONE model
+    - Notify SettingsWindow when model changes
+    """
+
+    # Signals consumed by SettingsWindow
     modelActivated = Signal(int)
     modelSaved = Signal(int)
     modelUpdated = Signal(int)
 
+    # -------------------------------------------------
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self.models = []
         self.active_model_id = None
 
-        self.setup_ui()
+        self._build_ui()
         self.refresh()
 
-    # ---------------------------------------------------
-    def setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(20)
-        layout.setContentsMargins(30, 30, 30, 30)
+    # -------------------------------------------------
+    # UI
+    # -------------------------------------------------
+    def _build_ui(self):
+        root = QVBoxLayout(self)
+        root.setSpacing(20)
+        root.setContentsMargins(28, 28, 28, 28)
 
-        # Header
+        # ---------------- HEADER ----------------
         header = QHBoxLayout()
-        header.addWidget(QLabel("<h2 style='color:#1e293b; margin:0;'>Quality Control Models</h2>"))
-        header.addStretch()
 
-        add_btn = QPushButton("+ Add New Model")
-        add_btn.setStyleSheet("background:#3b82f6; color:white; padding:10px 20px; border-radius:8px; font-weight:600;")
+        title = QLabel("Quality Control Models")
+        title.setObjectName("WindowTitle")
+
+        add_btn = QPushButton("Add New Model")
+        add_btn.setMinimumHeight(36)
+        add_btn.setProperty("role", "primary")
         add_btn.clicked.connect(self.add_new_model)
+
+        header.addWidget(title)
+        header.addStretch()
         header.addWidget(add_btn)
 
-        layout.addLayout(header)
+        root.addLayout(header)
 
-        # Table
-        # Table
-        self.table = QTableWidget()
-        self.table.setColumnCount(5)
+        # ---------------- TABLE ----------------
+        self.table = QTableWidget(0, 5)
+        self.table.setObjectName("ModelsTable")
         self.table.setHorizontalHeaderLabels(
             ["Model", "Type", "Tolerance (mm)", "Status", "Actions"]
         )
 
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setAlternatingRowColors(True)
+        self.table.setShowGrid(False)
 
-        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)  # Model
+        header.setSectionResizeMode(1, QHeaderView.Fixed)    # Type
+        header.setSectionResizeMode(2, QHeaderView.Stretch) # Tolerance
+        header.setSectionResizeMode(3, QHeaderView.Fixed)   # Status
+        header.setSectionResizeMode(4, QHeaderView.Fixed)   # Actions
 
+        self.table.setColumnWidth(1, 90)
+        self.table.setColumnWidth(3, 100)
+        self.table.setColumnWidth(4, 300)
 
-        layout.addWidget(self.table)
+        root.addWidget(self.table)
 
-    # ---------------------------------------------------
+    # -------------------------------------------------
+    # DATA
+    # -------------------------------------------------
     def refresh(self):
         self.models = get_models()
-        self.table.setRowCount(len(self.models))
 
-        # get current active model from DB (if you store it there)
         try:
-            from backend.models_dao import get_active_model
             active = get_active_model()
             self.active_model_id = active["id"] if active else None
         except Exception:
             self.active_model_id = None
 
-        for i, model in enumerate(self.models):
-            mid = model["id"]
+        self.table.setRowCount(len(self.models))
 
-            # ------------------------------------------------
-            # Model Name
-            # ------------------------------------------------
-            self.table.setItem(i, 0, QTableWidgetItem(model["name"]))
+        for row, model in enumerate(self.models):
+            self._populate_row(row, model)
 
-            # ------------------------------------------------
-            # Model Type (RHD / LHD)
-            # ------------------------------------------------
-            model_type = model.get("model_type") or "—"
-            type_item = QTableWidgetItem(model_type)
-            type_item.setTextAlignment(Qt.AlignCenter)
-            type_item.setForeground(Qt.GlobalColor.darkBlue)
-            self.table.setItem(i, 1, type_item)
+    # -------------------------------------------------
+    def _populate_row(self, row: int, model: dict):
+        model_id = model["id"]
+        is_active = model_id == self.active_model_id
 
-            # ------------------------------------------------
-            # Limits
-            # ------------------------------------------------
-            self.table.setItem(
-                i, 2,
-                QTableWidgetItem(f"{model['lower_limit']:.2f} – {model['upper_limit']:.2f}")
-            )
+        # ---------------- MODEL NAME ----------------
+        name_item = QTableWidgetItem(model["name"])
+        self._apply_active_style(name_item, is_active)
+        self.table.setItem(row, 0, name_item)
 
-            # ------------------------------------------------
-            # Status
-            # ------------------------------------------------
-            status = "Active" if mid == self.active_model_id else "Inactive"
-            status_item = QTableWidgetItem(status)
+        # ---------------- TYPE ----------------
+        type_item = QTableWidgetItem(model.get("model_type", "—"))
+        type_item.setTextAlignment(Qt.AlignCenter)
+        self._apply_active_style(type_item, is_active)
+        self.table.setItem(row, 1, type_item)
 
-            if status == "Active":
-                status_item.setForeground(Qt.GlobalColor.green)
-            else:
-                status_item.setForeground(Qt.GlobalColor.gray)
+        # ---------------- TOLERANCE ----------------
+        tol_text = (
+            f"{model['lower_limit']:.2f} – {model['upper_limit']:.2f}"
+        )
+        tol_item = QTableWidgetItem(tol_text)
+        self._apply_active_style(tol_item, is_active)
+        self.table.setItem(row, 2, tol_item)
 
-            self.table.setItem(i, 3, status_item)
+        # ---------------- STATUS ----------------
+        status_item = QTableWidgetItem(
+            "Active" if is_active else "Inactive"
+        )
+        status_item.setTextAlignment(Qt.AlignCenter)
 
-            # ------------------------------------------------
-            # Actions
-            # ------------------------------------------------
-            actions = QWidget()
-            hlay = QHBoxLayout(actions)
-            hlay.setContentsMargins(5, 5, 5, 5)
+        if is_active:
+            status_item.setForeground(QColor("#22c55e"))
+            status_item.setFont(QFont("Segoe UI", weight=QFont.Bold))
+        else:
+            status_item.setForeground(QColor("#6b7280"))
 
-            activate = QPushButton("Activate")
-            activate.setStyleSheet("background:#10b981; color:white; padding:6px 12px; border-radius:6px;")
-            activate.clicked.connect(lambda _, m=model: self.activate_model(m))
+        self.table.setItem(row, 3, status_item)
 
-            edit = QPushButton("Edit")
-            edit.setStyleSheet("background:#3b82f6; color:white; padding:6px 12px; border-radius:6px;")
-            edit.clicked.connect(lambda _, m=model: self.edit_model(m))
+        # ---------------- ACTIONS ----------------
+        actions_widget = QWidget()
+        actions_layout = QHBoxLayout(actions_widget)
+        actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setSpacing(8)
 
-            delete = QPushButton("Delete")
-            delete.setStyleSheet("background:#ef4444; color:white; padding:6px 12px; border-radius:6px;")
-            delete.clicked.connect(lambda _, mid=mid: self.delete_model(mid))
+        activate_btn = QPushButton("Activate")
+        activate_btn.setEnabled(not is_active)
+        activate_btn.clicked.connect(
+            lambda _, m=model: self.activate_model(m)
+        )
 
-            for btn in (activate, edit, delete):
-                hlay.addWidget(btn)
+        edit_btn = QPushButton("Edit")
+        edit_btn.clicked.connect(
+            lambda _, m=model: self.edit_model(m)
+        )
 
-            self.table.setCellWidget(i, 4, actions)
+        delete_btn = QPushButton("Delete")
+        delete_btn.setProperty("role", "danger")
+        delete_btn.clicked.connect(
+            lambda _, mid=model_id: self.delete_model(mid)
+        )
 
-    # ---------------------------------------------------
+        actions_layout.addWidget(activate_btn)
+        actions_layout.addWidget(edit_btn)
+        actions_layout.addWidget(delete_btn)
+        actions_layout.addStretch()
+
+        self.table.setCellWidget(row, 4, actions_widget)
+        self.table.setRowHeight(row, 64)
+
+    # -------------------------------------------------
+    def _apply_active_style(self, item: QTableWidgetItem, is_active: bool):
+        if is_active:
+            item.setForeground(QColor("#22c55e"))
+            item.setFont(QFont("Segoe UI", weight=QFont.Bold))
+        else:
+            item.setForeground(QColor("#6b7280"))
+
+    # -------------------------------------------------
+    # ACTIONS
+    # -------------------------------------------------
     def add_new_model(self):
-        dialog = ModelEditDialog(self)
-        if dialog.exec():
+        dlg = ModelEditDialog(self)
+        if dlg.exec():
             self.refresh()
-            # ✅ emit last added as "saved"
             if self.models:
                 self.modelSaved.emit(self.models[-1]["id"])
 
-    # ---------------------------------------------------
-    def edit_model(self, model):
-        dialog = ModelEditDialog(self, model)
-        if dialog.exec():
+    def edit_model(self, model: dict):
+        dlg = ModelEditDialog(self, model)
+        if dlg.exec():
             self.refresh()
             self.modelUpdated.emit(model["id"])
 
-    # ---------------------------------------------------
-    def delete_model(self, model_id):
-        reply = QMessageBox.question(self, "Confirm", "Delete this model and all its alert phones?")
-        if reply == QMessageBox.StandardButton.Yes:
+    def delete_model(self, model_id: int):
+        reply = QMessageBox.question(
+            self,
+            "Confirm Delete",
+            "Delete this model and all associated alert contacts?",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+
+        if reply == QMessageBox.Yes:
             delete_model(model_id)
             self.refresh()
 
-    # ---------------------------------------------------
-    # ✅ CRITICAL FIX: ACTIVATE MODEL
-    # ---------------------------------------------------
-    def activate_model(self, model):
-        dialog = ActivateModelDialog(self, model)
+    def activate_model(self, model: dict):
+        dlg = ActivateModelDialog(self, model)
 
-        if dialog.exec():
+        if dlg.exec():
+            model_id = model["id"]
             try:
-                model_id = model["id"]
-
-                # ✅ PERSIST ACTIVE MODEL
                 db_set_active_model(model_id)
-
-                # ✅ UPDATE LOCAL STATE
                 self.active_model_id = model_id
                 self.refresh()
-
-                # ✅ EMIT SIGNAL TO SettingsWindow → MainWindow → Live Page
                 self.modelActivated.emit(model_id)
+            except Exception as exc:
+                QMessageBox.critical(
+                    self, "Activation Failed", str(exc)
+                )
 
-            except Exception as e:
-                QMessageBox.critical(self, "Activation Failed", str(e))
-
-    # ---------------------------------------------------
-    # ✅ USED BY SettingsWindow
-    # ---------------------------------------------------
+    # -------------------------------------------------
+    # Used by SettingsWindow
+    # -------------------------------------------------
     def get_active_model_id(self):
         return self.active_model_id
 
-    # ---------------------------------------------------
     def persist_active_selection(self):
         if self.active_model_id:
             try:

@@ -6,6 +6,9 @@ from .db import query
 
 # Use the shared model cache (very fast)
 from backend.model_watchdog import get_cached_model, register_listener
+import logging
+
+log = logging.getLogger(__name__)
 
 ACTIVE_MODEL_CACHE = {
     "id": None,
@@ -34,9 +37,9 @@ def _update_local_cache(model: dict):
         # accept both lower_limit or lower
         ACTIVE_MODEL_CACHE["lower_limit"] = float(model.get("lower_limit", model.get("lower", 0)))
         ACTIVE_MODEL_CACHE["upper_limit"] = float(model.get("upper_limit", model.get("upper", 100)))
-        print("cycles_dao: active model cache updated:", ACTIVE_MODEL_CACHE)
-    except Exception as e:
-        print("cycles_dao: failed to update cache:", e)
+        log.info("cycles_dao: active model cache updated: %s", ACTIVE_MODEL_CACHE)
+    except Exception:
+        log.exception("cycles_dao: failed to update cache")
 
 
 # Register cache updater with watchdog

@@ -3,6 +3,9 @@ import time
 import threading
 from PySide6.QtCore import QObject, Signal
 from config.serial_ports import APP_READ_PORT, LASER_BAUD
+import logging
+
+log = logging.getLogger(__name__)
 
 
 class LaserReader(QObject):
@@ -33,7 +36,7 @@ class LaserReader(QObject):
     def _worker(self):
         while self.running:
             try:
-                print(f"🔌 Connecting to Laser on {APP_READ_PORT}...")
+                log.info("🔌 Connecting to Laser on %s...", APP_READ_PORT)
 
                 self.serial = serial.Serial(
                     APP_READ_PORT,
@@ -49,7 +52,7 @@ class LaserReader(QObject):
                 self.serial.setRTS(True)
 
                 self.status_changed.emit("CONNECTED")
-                print(f"✅ Laser connected → {APP_READ_PORT}")
+                log.info("✅ Laser connected → %s", APP_READ_PORT)
 
                 self.last_data_time = time.time()
                 self.last_emit_time = 0
@@ -83,13 +86,13 @@ class LaserReader(QObject):
                         raise
 
             except Exception as e:
-                print("❌ Laser disconnected:", e)
+                log.exception("❌ Laser disconnected: %s", e)
                 self.status_changed.emit("DISCONNECTED")
                 self._safe_close()
                 time.sleep(1.5)
 
         self._safe_close()
-        print("✅ Laser reader thread exited cleanly")
+        log.info("✅ Laser reader thread exited cleanly")
 
     # --------------------------------------------------
     def _safe_close(self):
@@ -109,13 +112,13 @@ class LaserReader(QObject):
                 del self.serial
 
         except Exception as e:
-            print("⚠️ COM close warning:", e)
+            log.warning("⚠️ COM close warning: %s", e)
 
         self.serial = None
 
     # --------------------------------------------------
     def stop(self):
-        print("🛑 Stopping Laser Reader...")
+        log.info("🛑 Stopping Laser Reader...")
         self.running = False
 
         if self.thread and self.thread.is_alive():

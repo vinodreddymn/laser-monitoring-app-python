@@ -1,6 +1,9 @@
 # backend/alert_phones_dao.py
 
+import logging
 from .db import query
+
+log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------

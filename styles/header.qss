@@ -1,0 +1,31 @@
+#HeaderWidget {
+    background-color: #0f172a;
+    border-bottom: 1px solid #334155;
+}
+
+#HeaderWidget QLabel {
+    color: #e5e7eb;
+}
+
+#HeaderCompany {
+    color: #fbbf24;   /* warm gold */
+}
+
+#HeaderDateTime {
+    color: #93c5fd;
+}
+
+#HeaderSettingsButton {
+    background-color: #1d4ed8;
+    color: white;
+    border: 1px solid #3b82f6;
+    border-radius: 8px;
+}
+
+#HeaderSettingsButton:hover {
+    background-color: #2563eb;
+}
+
+#HeaderSettingsButton:pressed {
+    background-color: #1e40af;
+}
