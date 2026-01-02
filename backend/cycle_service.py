@@ -1,11 +1,25 @@
 # ======================================================
 # Cycle Processing Service (Single Source of Truth)
+# Pneumatic Laser QC System
+#
+# Responsibilities:
+# - Handle detected cycle end-to-end
+# - Generate QR (PASS only)
+# - Emit UI signal
+# - Persist cycle to DB
+# - Perform live auto-print (PASS)
+# - Log AUTO print audit
+# - Queue SMS alerts (FAIL)
 # ======================================================
 
 import logging
 
 from backend.qr_generator import generate_and_save_qr_code
-from backend.cycles_dao import log_cycle, mark_printed
+from backend.cycles_dao import (
+    log_cycle,
+    mark_printed,
+    log_print_event,
+)
 from backend.live_print import try_print_live_cycle
 from backend.sms_dao import queue_sms_by_model
 
@@ -16,12 +30,14 @@ def handle_detected_cycle(cycle: dict, signals):
     """
     SINGLE authoritative handler for a detected cycle.
 
-    Flow (IMPORTANT ORDER):
+    STRICT FLOW ORDER (DO NOT CHANGE):
     1. Generate QR (PASS only)
     2. Emit UI signal (cycle_detected)
     3. Log cycle to DB
-    4. Live auto-print (PASS)
-    5. Queue SMS (FAIL)
+    4. Live AUTO print (PASS only)
+       - mark printed
+       - log AUTO print audit
+    5. Queue SMS alert (FAIL only)
     """
 
     # --------------------------------------------------
@@ -42,12 +58,12 @@ def handle_detected_cycle(cycle: dict, signals):
             qr = generate_and_save_qr_code(
                 model_name=cycle.get("model_name", "UNKNOWN"),
                 peak_value=cycle.get("peak_height", 0.0),
-                timestamp=cycle.get("timestamp")
+                timestamp=cycle.get("timestamp"),
             )
 
             qr_text = qr.get("text")
             qr_image_path = qr.get("absolutePath")
-            qr_code_id = qr.get("text")  # Use the QR text as ID for filename
+            qr_code_id = qr_text  # QR text used as unique ID
 
             cycle["qr_text"] = qr_text
             cycle["qr_code_id"] = qr_code_id
@@ -98,8 +114,8 @@ def handle_detected_cycle(cycle: dict, signals):
             {
                 "id": cycle_id,
                 "qr_code": qr_text,
-                "qr_code_id": qr_code_id,  # Add QR ID for printing
-                "qr_image_path": qr_image_path,  # REQUIRED
+                "qr_code_id": qr_code_id,
+                "qr_image_path": qr_image_path,
                 "model_name": cycle.get("model_name", "UNKNOWN"),
                 "pass_fail": status,
             }
@@ -107,14 +123,25 @@ def handle_detected_cycle(cycle: dict, signals):
 
         if ok:
             try:
+                # 1️⃣ Mark cycle as printed
                 mark_printed(cycle_id)
-                log.info("Label printed for cycle %s", cycle_id)
+
+                # 2️⃣ Log AUTO print audit (CRITICAL)
+                log_print_event(
+                    cycle_id=cycle_id,
+                    print_type="AUTO",
+                    printed_by="SYSTEM",
+                    reason=None,
+                )
+
+                log.info("Label printed (AUTO) for cycle %s", cycle_id)
+
             except Exception as e:
                 log.warning(
-                    "Label printed but failed to mark printed: %s", e
+                    "Label printed but DB/audit update failed: %s", e
                 )
         else:
-            log.warning("Label NOT printed (live): %s", err)
+            log.warning("Label NOT printed (AUTO): %s", err)
 
     elif status == "PASS":
         log.warning(

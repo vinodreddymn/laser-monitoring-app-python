@@ -204,7 +204,7 @@ DEFAULT_QR_RETENTION_HOURS = 6
 # Peripheral Defaults
 # ==================================================
 
-DEFAULT_GSM_PORT = "COM1"
+DEFAULT_GSM_PORT = "COM11"
 DEFAULT_PLC_PORT = "COM6"
 DEFAULT_PRINTER_NAME = "PDFCreator"
 
@@ -229,3 +229,9 @@ EXCLUDED_PRINTERS = [
     "microsoft",
     "onenote",
 ]
+
+# ======================================================
+# TEST / SIMULATION MODE
+# ======================================================
+ENABLE_SIMULATOR = True   # 🔴 set False in production
+SIMULATOR_PORT = "COM5"

@@ -9,6 +9,7 @@ from backend.sms_sender import sms_signals
 from backend.gsm_modem import modem_signals
 from backend.usb_printer_manager import printer_signals
 
+
 from config.app_config import WINDOW_TITLE
 
 from gui.windows.settings_window import SettingsWindow
@@ -18,6 +19,8 @@ from gui.widgets.result_panel import ResultPanel
 from gui.widgets.cycles_panel import CyclesPanel
 from gui.widgets.footer_widget import FooterWidget
 from gui.widgets.header_widget import HeaderWidget
+from gui.windows.pending_qr_print_window import PendingQRPrintWindow
+
 
 
 class MainWindow(QWidget):
@@ -65,10 +68,12 @@ class MainWindow(QWidget):
 
         # ---------------- HEADER ----------------
         self.header = HeaderWidget(
+            on_print_clicked=self.open_pending_qr_window,
             on_settings_clicked=self.open_settings,
             on_shutdown_clicked=self.request_shutdown,
             kiosk_mode=self.KIOSK_MODE
         )
+
         root.addWidget(self.header)
 
         # ---------------- MAIN CONTENT ----------------
@@ -154,6 +159,19 @@ class MainWindow(QWidget):
 
         if reply == QMessageBox.Yes:
             self.close()
+
+
+    # ============================================================
+# PENDING QR PRINT WINDOW
+# ============================================================
+    def open_pending_qr_window(self):
+        if not hasattr(self, "_pending_qr_window"):
+            self._pending_qr_window = PendingQRPrintWindow(self)
+
+        self._pending_qr_window.show()
+        self._pending_qr_window.raise_()
+        self._pending_qr_window.activateWindow()
+
 
     # ============================================================
     # MODEL

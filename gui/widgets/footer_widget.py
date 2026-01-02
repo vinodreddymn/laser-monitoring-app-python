@@ -175,13 +175,16 @@ class FooterWidget(QFrame):
         time_str = info.get("time", "")
 
         html = (
-            '<span style="color:#38bdf8;">SMS SENT</span> '
-            f'<span style="color:#7dd3fc;">{name}</span> '
-            f'<span style="color:#fde68a;">({phone})</span> '
-            f'<span style="color:#93c5fd;">[{time_str}]</span>'
-            ' <span style="color:#64748b;">—</span> '
-            f'<span style="color:#22c55e;">{message}</span>'
+            '<span style="color:#38bdf8; font-weight:600;">SMS SENT</span>'
+            '<span style="color:#64748b;"> to </span>'
+            f'<span style="color:#7dd3fc; font-weight:600;">{name}</span> '
+            f'<span style="color:#94a3b8;">({phone})</span> '
+            '<span style="color:#64748b;"> at</span> '
+            f'<span style="color:#93c5fd;">{time_str}</span>'
+            '<span style="color:#64748b;"> — </span>'
+            f'<span style="color:#22c55e;">"{message}"</span>'
         )
+
 
         self.sms_label.setText(html)
         self._sms_active = True

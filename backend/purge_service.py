@@ -1,63 +1,19 @@
 # backend/purge_service.py
 # ======================================================
 # Purge Service (Production)
-#
-# - Deletes SENT SMS older than user-defined hours
-# - Deletes QR codes + QR image files older than user-defined hours
-# - Intervals are loaded from purge_settings.json
-#
-# Safe to call from main.py
 # ======================================================
 
 import os
-import json
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
 from backend.db import query
+from backend.purge_settings import load_purge_settings
 
 log = logging.getLogger(__name__)
 
-# ======================================================
-# PATHS & DEFAULTS
-# ======================================================
-
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-PURGE_SETTINGS_FILE = os.path.join(BASE_DIR, "purge_settings.json")
-
-DEFAULT_SETTINGS = {
-    "sms_sent_retention_hours": 24,
-    "qr_retention_hours": 24,
-}
-
-# ======================================================
-# SETTINGS LOADER
-# ======================================================
-
-def _load_purge_settings() -> dict:
-    """
-    Load purge settings from purge_settings.json.
-    Falls back to safe defaults.
-    """
-    try:
-        if not os.path.exists(PURGE_SETTINGS_FILE):
-            log.warning("purge_settings.json not found → using defaults")
-            return DEFAULT_SETTINGS.copy()
-
-        with open(PURGE_SETTINGS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        settings = DEFAULT_SETTINGS.copy()
-        for key in settings:
-            if key in data:
-                settings[key] = max(1, int(data[key]))
-
-        return settings
-
-    except Exception:
-        log.exception("Failed to load purge_settings.json → using defaults")
-        return DEFAULT_SETTINGS.copy()
 
 # ======================================================
 # PUBLIC ENTRY POINT
@@ -66,30 +22,32 @@ def _load_purge_settings() -> dict:
 def run_purge():
     """
     Main purge entry point.
-    Call this safely from main.py.
+    Safe to call from main.py / cron / systemd.
     """
-    settings = _load_purge_settings()
+    settings = load_purge_settings()
+    now = datetime.now()
 
-    sms_hours = settings["sms_sent_retention_hours"]
-    qr_hours = settings["qr_retention_hours"]
-
-    sms_cutoff = datetime.now() - timedelta(hours=sms_hours)
-    qr_cutoff = datetime.now() - timedelta(hours=qr_hours)
+    sms_cutoff = now - timedelta(hours=settings["sms_sent_retention_hours"])
+    qr_cutoff = now - timedelta(hours=settings["qr_retention_hours"])
+    cycles_cutoff = now - timedelta(hours=settings["cycles_retention_hours"])
 
     log.warning(
-        "🧹 Purge started | SMS retention=%dh | QR retention=%dh",
-        sms_hours,
-        qr_hours,
+        "🧹 Purge started | SMS=%dh | QR=%dh | Cycles=%dh",
+        settings["sms_sent_retention_hours"],
+        settings["qr_retention_hours"],
+        settings["cycles_retention_hours"],
     )
 
     sms_deleted = _purge_sms_queue(sms_cutoff)
     qr_rows_deleted, qr_images_deleted = _purge_qr_codes_and_images(qr_cutoff)
+    cycles_deleted = _purge_cycles(cycles_cutoff)
 
     log.warning(
-        "✅ Purge completed | SMS deleted=%d | QR rows=%d | QR images=%d",
+        "✅ Purge completed | SMS=%d | QR rows=%d | QR images=%d | Cycles=%d (logs cascaded)",
         sms_deleted,
         qr_rows_deleted,
         qr_images_deleted,
+        cycles_deleted,
     )
 
 # ======================================================
@@ -97,9 +55,6 @@ def run_purge():
 # ======================================================
 
 def _purge_sms_queue(cutoff: datetime) -> int:
-    """
-    Delete only SENT SMS older than cutoff.
-    """
     try:
         rows = query(
             """
@@ -125,7 +80,7 @@ def _purge_sms_queue(cutoff: datetime) -> int:
             (cutoff.strftime("%Y-%m-%d %H:%M:%S"),),
         )
 
-        log.info("🗑 SMS queue purged: %d row(s)", count)
+        log.info("🗑 SMS purged: %d row(s)", count)
         return count
 
     except Exception:
@@ -137,9 +92,6 @@ def _purge_sms_queue(cutoff: datetime) -> int:
 # ======================================================
 
 def _purge_qr_codes_and_images(cutoff: datetime) -> Tuple[int, int]:
-    """
-    Delete QR DB rows and corresponding image files older than cutoff.
-    """
     try:
         rows = query(
             """
@@ -156,20 +108,15 @@ def _purge_qr_codes_and_images(cutoff: datetime) -> Tuple[int, int]:
 
         images_deleted = 0
 
-        # ---- delete files first ----
         for row in rows:
             if _delete_qr_image(row.get("filename")):
                 images_deleted += 1
 
-        # ---- delete DB rows ----
         ids = [row["id"] for row in rows]
         placeholders = ",".join(["%s"] * len(ids))
 
         query(
-            f"""
-            DELETE FROM qr_codes
-            WHERE id IN ({placeholders})
-            """,
+            f"DELETE FROM qr_codes WHERE id IN ({placeholders})",
             tuple(ids),
         )
 
@@ -186,14 +133,49 @@ def _purge_qr_codes_and_images(cutoff: datetime) -> Tuple[int, int]:
         return 0, 0
 
 # ======================================================
+# CYCLES + PRINT LOG PURGE (CASCADE)
+# ======================================================
+
+def _purge_cycles(cutoff: datetime) -> int:
+    try:
+        rows = query(
+            """
+            SELECT id
+            FROM cycles
+            WHERE timestamp < %s
+            """,
+            (cutoff.strftime("%Y-%m-%d %H:%M:%S"),),
+        )
+
+        count = len(rows) if rows else 0
+        if count == 0:
+            log.info("ℹ No cycles to purge")
+            return 0
+
+        query(
+            """
+            DELETE FROM cycles
+            WHERE timestamp < %s
+            """,
+            (cutoff.strftime("%Y-%m-%d %H:%M:%S"),),
+        )
+
+        log.info(
+            "🗑 Cycles purged: %d row(s) (print logs cascaded)",
+            count,
+        )
+
+        return count
+
+    except Exception:
+        log.exception("❌ Failed to purge cycles")
+        return 0
+
+# ======================================================
 # FILE DELETE (SAFE)
 # ======================================================
 
 def _delete_qr_image(filename: Optional[str]) -> bool:
-    """
-    Deletes a QR image file.
-    Returns True if a file was actually deleted.
-    """
     if not filename:
         return False
 

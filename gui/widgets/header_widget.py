@@ -1,4 +1,5 @@
 import os
+
 from PySide6.QtWidgets import (
     QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy
 )
@@ -14,15 +15,18 @@ class HeaderWidget(QFrame):
     - Gradient background
     - Logo + company name
     - Live date & time
-    - Settings button (always visible)
+    - Icon-only Print button
+    - Icon-only Settings button
     - Shutdown icon (ONLY in kiosk mode)
     """
 
     HEADER_HEIGHT = 60
     LOGO_HEIGHT = 36
+    ICON_BTN_SIZE = (38, 34)
 
     def __init__(
         self,
+        on_print_clicked,
         on_settings_clicked,
         on_shutdown_clicked=None,
         kiosk_mode: bool = False,
@@ -30,6 +34,7 @@ class HeaderWidget(QFrame):
     ):
         super().__init__(parent)
 
+        self.on_print_clicked = on_print_clicked
         self.on_settings_clicked = on_settings_clicked
         self.on_shutdown_clicked = on_shutdown_clicked
         self.kiosk_mode = kiosk_mode
@@ -41,6 +46,7 @@ class HeaderWidget(QFrame):
     def _build_ui(self):
         self.setObjectName("HeaderWidget")
 
+        # ---------------- Header Style ----------------
         self.setStyleSheet("""
             #HeaderWidget {
                 background: qlineargradient(
@@ -73,7 +79,7 @@ class HeaderWidget(QFrame):
                     )
                 )
 
-        # ---------------- Company ----------------
+        # ---------------- Company Name ----------------
         company = QLabel("ASHTECH ENGINEERING SOLUTIONS")
         company.setFont(QFont("Segoe UI", 18, QFont.Bold))
         company.setStyleSheet("color:#7dd3fc; background:transparent;")
@@ -82,53 +88,75 @@ class HeaderWidget(QFrame):
         # ---------------- Date / Time ----------------
         self.datetime_lbl = QLabel("")
         self.datetime_lbl.setFont(QFont("Segoe UI", 15, QFont.DemiBold))
-        self.datetime_lbl.setStyleSheet("color:#93c5fd; background:transparent;")
+        self.datetime_lbl.setStyleSheet(
+            "color:#93c5fd; background:transparent;"
+        )
 
-        # ---------------- Settings ----------------
-        settings_btn = QPushButton("Settings")
-        settings_btn.setFixedSize(120, 34)
-        settings_btn.setFont(QFont("Segoe UI", 14, QFont.Bold))
-        settings_btn.setCursor(Qt.PointingHandCursor)
-        settings_btn.clicked.connect(self.on_settings_clicked)
-        settings_btn.setStyleSheet("""
+        # ---------------- Common Icon Button Style ----------------
+        icon_btn_style = """
             QPushButton {
-                background:#1d4ed8;
-                color:white;
-                border-radius:7px;
+                background: transparent;
+                color: #e5e7eb;
+                border: 1px solid #334155;
+                border-radius: 7px;
             }
-            QPushButton:hover { background:#2563eb; }
-            QPushButton:pressed { background:#1e40af; }
-        """)
+            QPushButton:hover {
+                background: #1e293b;
+            }
+            QPushButton:pressed {
+                background: #020617;
+            }
+        """
 
-        # ---------------- Assemble ----------------
+        # ---------------- PRINT (ICON ONLY) ----------------
+        print_btn = QPushButton("🖨")
+        print_btn.setFixedSize(*self.ICON_BTN_SIZE)
+        print_btn.setFont(QFont("Segoe UI", 16))
+        print_btn.setCursor(Qt.PointingHandCursor)
+        print_btn.setToolTip("Print pending QR labels")
+        print_btn.clicked.connect(self.on_print_clicked)
+        print_btn.setStyleSheet(icon_btn_style)
+
+        # ---------------- SETTINGS (ICON ONLY) ----------------
+        settings_btn = QPushButton("⚙")
+        settings_btn.setFixedSize(*self.ICON_BTN_SIZE)
+        settings_btn.setFont(QFont("Segoe UI", 17))
+        settings_btn.setCursor(Qt.PointingHandCursor)
+        settings_btn.setToolTip("Application settings")
+        settings_btn.clicked.connect(self.on_settings_clicked)
+        settings_btn.setStyleSheet(icon_btn_style)
+
+        # ---------------- Assemble Left → Right ----------------
         layout.addWidget(logo)
         layout.addWidget(company)
         layout.addStretch()
         layout.addWidget(self.datetime_lbl)
         layout.addSpacing(12)
+        layout.addWidget(print_btn)
+        layout.addSpacing(6)
         layout.addWidget(settings_btn)
 
-        # ---------------- Shutdown ICON (KIOSK ONLY) ----------------
+        # ---------------- SHUTDOWN (KIOSK ONLY) ----------------
         if self.kiosk_mode and self.on_shutdown_clicked:
             shutdown_btn = QPushButton("⏻")
-            shutdown_btn.setFixedSize(38, 34)
+            shutdown_btn.setFixedSize(*self.ICON_BTN_SIZE)
             shutdown_btn.setFont(QFont("Segoe UI", 18, QFont.Bold))
             shutdown_btn.setCursor(Qt.PointingHandCursor)
             shutdown_btn.setToolTip("Shutdown application")
             shutdown_btn.clicked.connect(self.on_shutdown_clicked)
             shutdown_btn.setStyleSheet("""
                 QPushButton {
-                    background:transparent;
-                    color:#ef4444;
-                    border:1px solid #7f1d1d;
-                    border-radius:7px;
+                    background: transparent;
+                    color: #ef4444;
+                    border: 1px solid #7f1d1d;
+                    border-radius: 7px;
                 }
                 QPushButton:hover {
-                    background:#7f1d1d;
-                    color:white;
+                    background: #7f1d1d;
+                    color: white;
                 }
                 QPushButton:pressed {
-                    background:#991b1b;
+                    background: #991b1b;
                 }
             """)
             layout.addSpacing(6)
@@ -136,4 +164,5 @@ class HeaderWidget(QFrame):
 
     # --------------------------------------------------
     def set_datetime(self, text: str):
+        """Update live date/time label"""
         self.datetime_lbl.setText(text)

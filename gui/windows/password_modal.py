@@ -23,7 +23,7 @@ class PasswordModal(QDialog):
     - Internal (apply_base_dialog_style)
     """
 
-    WIDTH = 380
+    WIDTH = 550
     HEIGHT = 300
 
     # -------------------------------------------------

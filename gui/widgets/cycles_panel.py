@@ -104,7 +104,9 @@ class CyclesPanel(QFrame):
         if not cycles:
             empty = QLabel("No cycles recorded")
             empty.setAlignment(Qt.AlignCenter)
-            empty.setFont(QFont("Segoe UI", 13, QFont.Italic))
+            font = QFont("Segoe UI", 13)
+            font.setItalic(True)
+            empty.setFont(font)
             empty.setStyleSheet("color:#6b7280;")
             empty.setFixedHeight(
                 self.MAX_CYCLES * self.CARD_HEIGHT
