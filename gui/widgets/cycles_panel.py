@@ -190,7 +190,7 @@ class CyclesPanel(QFrame):
                 or "—"
             )
             qr = QLabel(qr_value)
-            qr.setFont(QFont("Consolas", 16, QFont.Bold))
+            qr.setFont(QFont("Consolas", 20, QFont.Bold))
             qr.setStyleSheet("color:#00f5a0;")
             qr.setWordWrap(False)
         else:

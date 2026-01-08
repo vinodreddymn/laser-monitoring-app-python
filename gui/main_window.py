@@ -180,19 +180,20 @@ class MainWindow(QWidget):
         model = get_active_model()
         if not model:
             self.plot_panel.reset()
+            self.plot_panel.reset_cycle_markers()
             return
 
-        self.plot_panel.configure_limits(
-            float(model["lower_limit"]),
-            float(model["upper_limit"])
-        )
-
+        # ✅ This call already sets limits internally
         self.plot_panel.set_model_info(
             model["name"],
             model.get("model_type", "N/A"),
             float(model["lower_limit"]),
             float(model["upper_limit"])
         )
+
+        # Clear old cycle overlays
+        self.plot_panel.reset_cycle_markers()
+
 
     # ============================================================
     # CYCLES
@@ -202,9 +203,17 @@ class MainWindow(QWidget):
         if not cycle.get("completed", True):
             return
 
+        # 🔹 NEW: update plot QC overlays (reference, min, depth band)
+        self.plot_panel.update_cycle_result(cycle)
+
+        # 🔹 Existing behavior
         self.result_panel.update_result(cycle)
+
         QTimer.singleShot(80, self.refresh_cycles)
 
+        # ============================================================
+    # REFRESH CYCLES LIST
+    # ============================================================
     def refresh_cycles(self):
         try:
             cycles = get_cycles(limit=40)

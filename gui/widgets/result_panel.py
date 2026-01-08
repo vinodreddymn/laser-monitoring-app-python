@@ -40,7 +40,7 @@ class ResultPanel(QFrame):
         self.status_lbl.setStyleSheet("color: #888;")
 
         self.details_lbl = QLabel("")
-        self.details_lbl.setFont(QFont("Segoe UI", 18))
+        self.details_lbl.setFont(QFont("Segoe UI", 24))
         self.details_lbl.setAlignment(Qt.AlignCenter)
         self.details_lbl.setWordWrap(True)
         self.details_lbl.setStyleSheet("color: #ccc;")
@@ -52,7 +52,7 @@ class ResultPanel(QFrame):
         # RIGHT: QR Text (large monospace, adaptive)
         self.qr_lbl = QLabel("—")
         self.qr_lbl.setAlignment(Qt.AlignCenter)
-        self.qr_lbl.setFont(QFont("Consolas", 45, QFont.Bold))
+        self.qr_lbl.setFont(QFont("Consolas", 55, QFont.Bold))
         self.qr_lbl.setWordWrap(True)
         self.qr_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.qr_lbl.setStyleSheet("""
@@ -105,7 +105,8 @@ class ResultPanel(QFrame):
 
     def update_result(self, cycle: dict):
         status = cycle.get("pass_fail", "UNKNOWN")
-        peak = float(cycle.get("peak_height", 0.0))
+        weld_depth = float(cycle.get("weld_depth", 0.0))
+        model_type = cycle.get("model_type", "N/A")
         model = cycle.get("model_name", "Unknown")
         qr_text = cycle.get("qr_text", "").strip() or "—"
 
@@ -151,8 +152,8 @@ class ResultPanel(QFrame):
 
         # === Details text ===
         details_text = (
-            f"<b>Model:</b> {model}<br>"
-            f"<b>Peak:</b> {peak:.2f} mm<br>"
+            f"<b>Model:</b> {model} ({model_type})<br>"
+            f"<b>Weld Depth:</b> {weld_depth:.2f} mm<br>"
             f"<b>Time:</b> {time_str}"
         )
         self.details_lbl.setText(details_text)
@@ -163,10 +164,10 @@ class ResultPanel(QFrame):
 
         # === Adaptive font sizing (after layout update) ===
         QTimer.singleShot(0, lambda: self._adjust_font_to_fit(
-            self.qr_lbl, display_qr_text, base_size=50, min_size=18))
+            self.qr_lbl, display_qr_text, base_size=80, min_size=32))
 
         QTimer.singleShot(0, lambda: self._adjust_font_to_fit(
-            self.details_lbl, details_text, base_size=24, min_size=14))
+            self.details_lbl, details_text, base_size=30, min_size=18))
 
     def show_error(self, text: str):
         self.status_lbl.setText(text)

@@ -1,11 +1,17 @@
-# gui/windows/settings_window.py
-
 import logging
+from typing import Dict
+
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QTabWidget,
-    QPushButton, QHBoxLayout, QMessageBox
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QTabWidget,
+    QPushButton,
+    QMessageBox,
+    QFrame
 )
-from PySide6.QtCore import Signal, Slot
+from PySide6.QtCore import Signal, Slot, Qt
 
 from backend.models_dao import set_active_model
 from gui.windows.models_tab import ModelsTab
@@ -18,23 +24,28 @@ log = logging.getLogger(__name__)
 
 class SettingsWindow(QDialog):
     """
-    System Settings – Central Configuration Dialog
+    System Settings – Factory Floor Configuration Panel
 
-    Responsibilities:
-    - Host all settings-related tabs
-    - Coordinate model activation lifecycle
-    - Emit settings_applied when changes occur
+    Purpose
+    -------
+    • Central configuration for system supervisors
+    • Model management, alert contacts, security
+    • Safe apply / commit workflow
 
-    Styling:
-    - Self-contained (via apply_base_dialog_style)
+    Design Principles
+    -----------------
+    • Stable layout (no visual jump)
+    • Clear action separation
+    • Touch & mouse friendly
+    • 1920x1080 optimized
     """
 
     settings_applied = Signal(dict)
 
-    WIDTH = 920
-    HEIGHT = 660
+    WIDTH = 1280
+    HEIGHT = 820
 
-    # --------------------------------------------------
+    # ==================================================
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -46,19 +57,23 @@ class SettingsWindow(QDialog):
         self._build_ui()
         self._connect_signals()
 
-        # Apply centralized internal styling
         apply_base_dialog_style(self)
 
-    # --------------------------------------------------
-    # UI
-    # --------------------------------------------------
+    # ==================================================
+    # UI CONSTRUCTION
+    # ==================================================
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(20, 20, 20, 20)
-        root.setSpacing(14)
+        root.setContentsMargins(24, 24, 24, 20)
+        root.setSpacing(18)
 
-        # ---------------- Tabs ----------------
+        # ---------------- HEADER ----------------
+        header = self._build_header()
+        root.addWidget(header)
+
+        # ---------------- TABS ----------------
         self.tabs = QTabWidget()
+        self.tabs.setDocumentMode(True)
         root.addWidget(self.tabs, stretch=1)
 
         self.models_tab = ModelsTab(self)
@@ -67,64 +82,103 @@ class SettingsWindow(QDialog):
 
         self.tabs.addTab(self.models_tab, "Models")
         self.tabs.addTab(self.alert_phones_tab, "Alert Contacts")
-        self.tabs.addTab(self.password_tab, "Change Password")
+        self.tabs.addTab(self.password_tab, "Security")
 
-        # ---------------- Buttons ----------------
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(10)
-        btn_row.addStretch()
+        # ---------------- FOOTER ACTIONS ----------------
+        footer = self._build_footer()
+        root.addWidget(footer)
+
+    # --------------------------------------------------
+    def _build_header(self) -> QFrame:
+        frame = QFrame()
+        layout = QHBoxLayout(frame)
+        layout.setContentsMargins(0, 0, 0, 8)
+        layout.setSpacing(12)
+
+        title = QLabel("System Settings")
+        title.setObjectName("DialogTitle")
+
+        subtitle = QLabel("Configuration & Control Panel")
+        subtitle.setObjectName("MutedText")
+        subtitle.setAlignment(Qt.AlignVCenter)
+
+        layout.addWidget(title)
+        layout.addSpacing(10)
+        layout.addWidget(subtitle)
+        layout.addStretch()
+
+        return frame
+
+    # --------------------------------------------------
+    def _build_footer(self) -> QFrame:
+        frame = QFrame()
+        layout = QHBoxLayout(frame)
+        layout.setContentsMargins(0, 10, 0, 0)
+        layout.setSpacing(12)
+
+        layout.addStretch()
 
         self.btn_apply = QPushButton("Apply")
         self.btn_apply.setProperty("role", "secondary")
+        self.btn_apply.setMinimumWidth(120)
 
         self.btn_ok = QPushButton("OK")
         self.btn_ok.setProperty("role", "primary")
+        self.btn_ok.setMinimumWidth(120)
 
         self.btn_close = QPushButton("Close")
         self.btn_close.setProperty("role", "secondary")
+        self.btn_close.setMinimumWidth(120)
 
-        btn_row.addWidget(self.btn_apply)
-        btn_row.addWidget(self.btn_ok)
-        btn_row.addWidget(self.btn_close)
+        layout.addWidget(self.btn_apply)
+        layout.addWidget(self.btn_ok)
+        layout.addWidget(self.btn_close)
 
-        root.addLayout(btn_row)
+        return frame
 
-    # --------------------------------------------------
-    # Signals
-    # --------------------------------------------------
+    # ==================================================
+    # SIGNALS
+    # ==================================================
     def _connect_signals(self):
-        # Dialog buttons
+        # Footer buttons
         self.btn_apply.clicked.connect(self.apply)
         self.btn_ok.clicked.connect(self.apply_and_close)
         self.btn_close.clicked.connect(self.reject)
 
-        # Model lifecycle signals
+        # Model lifecycle events
         self.models_tab.modelActivated.connect(self._on_model_changed)
         self.models_tab.modelSaved.connect(self._on_model_changed)
         self.models_tab.modelUpdated.connect(self._on_model_changed)
 
-    # --------------------------------------------------
-    # Model handling
-    # --------------------------------------------------
+    # ==================================================
+    # MODEL HANDLING (CENTRALIZED)
+    # ==================================================
     @Slot(int)
     def _on_model_changed(self, model_id: int):
         """
-        Centralized model activation point
+        Single authoritative model activation handler
         """
         try:
             set_active_model(model_id)
-            log.info("Active model set → %s", model_id)
+            log.info("Active model updated → %s", model_id)
+
+            self.settings_applied.emit({
+                "model_id": model_id,
+                "applied": True
+            })
+
         except Exception:
-            log.exception("Failed to set active model")
+            log.exception("Failed to update active model")
+            QMessageBox.critical(
+                self,
+                "Model Activation Failed",
+                "Unable to activate the selected model.\n"
+                "Please check system logs."
+            )
 
-        self.settings_applied.emit({
-            "model_id": model_id,
-            "applied": True
-        })
-
-    # --------------------------------------------------
-    # Apply logic
-    # --------------------------------------------------
+    # ==================================================
+    # APPLY LOGIC
+    # ==================================================
     @Slot()
     def apply(self):
         """
@@ -133,16 +187,23 @@ class SettingsWindow(QDialog):
         try:
             if hasattr(self.models_tab, "persist_active_selection"):
                 self.models_tab.persist_active_selection()
+
+            self.settings_applied.emit({"applied": True})
+
+            QMessageBox.information(
+                self,
+                "Settings Applied",
+                "All changes have been applied successfully."
+            )
+
         except Exception:
-            log.exception("Failed to persist model selection")
-
-        self.settings_applied.emit({"applied": True})
-
-        QMessageBox.information(
-            self,
-            "Settings Applied",
-            "Settings have been applied successfully."
-        )
+            log.exception("Settings apply failed")
+            QMessageBox.critical(
+                self,
+                "Apply Failed",
+                "Some settings could not be applied.\n"
+                "Please check system logs."
+            )
 
     @Slot()
     def apply_and_close(self):

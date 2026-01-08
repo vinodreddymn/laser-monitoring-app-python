@@ -25,8 +25,8 @@ class QRSettingsModal(QDialog):
     - Internal (apply_base_dialog_style)
     """
 
-    WIDTH = 480
-    HEIGHT = 380
+    WIDTH = 800
+    HEIGHT = 660
 
     # --------------------------------------------------
     def __init__(self, parent=None, model=None, callback=None):

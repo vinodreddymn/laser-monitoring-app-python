@@ -160,7 +160,7 @@ def generate_and_save_qr_code(
         {
             "id": qr_text,
             "type": model_type,
-            "peak": round(float(peak_value), 2),
+            "wd": round(float(peak_value), 2),
             "ts": timestamp,
         },
         separators=(",", ":")  # compact JSON

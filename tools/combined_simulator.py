@@ -1,17 +1,25 @@
-# tools/combined_simulator.py
-# ✅ MANUAL PLC CONTROL
-# ✅ CTRL+C SAFE SHUTDOWN
-# ✅ Laser simulation unchanged
+# ======================================================
+# PNEUMATIC + PLC SIMULATOR — FINAL v5 (WELDING-AWARE)
+#
+# ✅ Manual PLC Control
+# ✅ CTRL+C Safe Shutdown
+# ✅ Laser @ 25 Hz
+# ✅ Realistic welding vibration + depth collapse
 # Writes to COM5 → VSPE → COM6
+# ======================================================
 
 import sys
 import random
 import signal
 import threading
+
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QThread, QObject, QTimer, Signal
 
 
+# ======================================================
+# SIMULATOR CORE
+# ======================================================
 class _SimulatorCore(QObject):
     send_laser = Signal(float)
     send_plc   = Signal(str, str)
@@ -20,28 +28,44 @@ class _SimulatorCore(QObject):
         super().__init__()
         self.running = True
 
-        # ✅ Manual PLC override state
+        # -------------------------------
+        # Manual PLC override
+        # -------------------------------
         self.manual_plc_enabled = True
         self.manual_power = "ON"
         self.manual_status = "RUNNING"
 
+        # -------------------------------
+        # Laser simulation state machine
+        # -------------------------------
         self.state = "IDLE"
+
         self.value = 0.0
         self.peak = 0.0
+
+        self.reference_height = 0.0
+        self.weld_progress = 0.0
+
         self.hold_counter = 0
         self.idle_counter = random.randint(150, 400)
 
-        # ✅ Laser: 25 Hz (CPU optimized)
+        # -------------------------------
+        # Laser timer (25 Hz)
+        # -------------------------------
         self.laser_timer = QTimer()
         self.laser_timer.timeout.connect(self._generate_laser)
         self.laser_timer.start(40)
 
-        # ✅ PLC auto timer DISABLED when in manual mode
+        # -------------------------------
+        # PLC auto timer (disabled in manual)
+        # -------------------------------
         self.plc_timer = QTimer()
         self.plc_timer.timeout.connect(self._generate_plc_auto)
         self.plc_timer.start(random.randint(2000, 7000))
 
-        # ✅ Manual PLC input thread
+        # -------------------------------
+        # Manual PLC input thread
+        # -------------------------------
         self.input_thread = threading.Thread(
             target=self._manual_plc_input,
             daemon=True
@@ -49,31 +73,67 @@ class _SimulatorCore(QObject):
         self.input_thread.start()
 
     # --------------------------------------------------
+    # LASER SIGNAL GENERATION
+    # --------------------------------------------------
     def _generate_laser(self):
         if not self.running:
             return
 
+        # -------------------------------
+        # IDLE: No part present
+        # -------------------------------
         if self.state == "IDLE":
             self.value = round(random.uniform(0.0, 0.05), 2)
             self.idle_counter -= 1
+
             if self.idle_counter <= 0:
                 self.peak = round(random.uniform(45.0, 90.0), 2)
                 self.state = "RISING"
                 self.idle_counter = random.randint(150, 400)
 
+        # -------------------------------
+        # RISING: Pneumatic push
+        # -------------------------------
         elif self.state == "RISING":
             self.value += (self.peak - self.value) * 0.28
+
             if abs(self.value - self.peak) < 1.0:
                 self.value = self.peak
-                self.state = "HOLD"
-                self.hold_counter = random.randint(100, 200)
 
-        elif self.state == "HOLD":
-            self.value = self.peak + random.uniform(-0.2, 0.2)
+                # Clamp reference height
+                self.reference_height = self.peak
+
+                # Reset welding dynamics
+                self.weld_progress = 0.0
+                self.hold_counter = random.randint(120, 220)
+
+                self.state = "WELDING"
+
+        # -------------------------------
+        # WELDING: vibration + collapse
+        # -------------------------------
+        elif self.state == "WELDING":
+            # Progressive downward collapse (true weld depth)
+            self.weld_progress += random.uniform(0.02, 0.08)
+
+            # Vibration components
+            upward_vibration = random.uniform(0.0, 0.4)
+            downward_vibration = random.uniform(0.2, 1.2)
+
+            self.value = (
+                self.reference_height
+                - self.weld_progress
+                + upward_vibration
+                - downward_vibration
+            )
+
             self.hold_counter -= 1
             if self.hold_counter <= 0:
                 self.state = "FALLING"
 
+        # -------------------------------
+        # FALLING: Retract pneumatic
+        # -------------------------------
         elif self.state == "FALLING":
             self.value *= 0.84
             if self.value < 3.0:
@@ -83,29 +143,25 @@ class _SimulatorCore(QObject):
         self.send_laser.emit(self.value)
 
     # --------------------------------------------------
+    # PLC AUTO MODE
+    # --------------------------------------------------
     def _generate_plc_auto(self):
-        """
-        ✅ Only used when MANUAL MODE is OFF
-        """
         if not self.running or self.manual_plc_enabled:
             return
 
         power = "ON" if random.random() < 0.92 else "OFF"
-        status = "OFFLINE" if power == "OFF" else random.choice(
-            ["RUNNING", "IDLE", "FAULT", "ALARM"]
+        status = (
+            "OFFLINE"
+            if power == "OFF"
+            else random.choice(["RUNNING", "IDLE", "FAULT", "ALARM"])
         )
 
         self.send_plc.emit(power, status)
 
     # --------------------------------------------------
+    # MANUAL PLC INPUT
+    # --------------------------------------------------
     def _manual_plc_input(self):
-        """
-        ✅ Manual PLC Control
-        Type in terminal:
-            ON RUNNING
-            ON FAULT
-            OFF OFFLINE
-        """
         print("\n✅ MANUAL PLC INPUT ENABLED")
         print("👉 Type:  ON RUNNING | ON FAULT | OFF OFFLINE")
         print("👉 Type:  AUTO  → return to automatic PLC\n")
@@ -127,7 +183,6 @@ class _SimulatorCore(QObject):
                     continue
 
                 power, state = parts
-
                 if power not in ("ON", "OFF"):
                     print("❌ Power must be ON or OFF")
                     continue
@@ -137,8 +192,6 @@ class _SimulatorCore(QObject):
                 self.manual_status = state
 
                 print(f"✅ Manual PLC → {power}, {state}")
-
-                # Emit PLC change immediately when typed
                 self.send_plc.emit(power, state)
 
             except Exception:
@@ -151,6 +204,9 @@ class _SimulatorCore(QObject):
         self.plc_timer.stop()
 
 
+# ======================================================
+# SERIAL WRITER THREAD
+# ======================================================
 class SerialWriter(QThread):
     def __init__(self, port="COM5"):
         super().__init__()
@@ -163,7 +219,7 @@ class SerialWriter(QThread):
                 port=self.port,
                 baudrate=9600,
                 bytesize=8,
-                parity='N',
+                parity="N",
                 stopbits=1,
                 timeout=1
             )
@@ -173,21 +229,27 @@ class SerialWriter(QThread):
             print(f"❌ Cannot open {self.port}: {e}")
             return
 
-        # Create core AFTER serial is open
+        # Core after serial open
         self.core = _SimulatorCore()
 
-        # Connect simulator signals to serial writer
-        self.core.send_laser.connect(lambda v: self._write(f"L{v:07.2f}\r\n"))
-        self.core.send_plc.connect(lambda p, s: self._write(f"PLC:{p},{s}\r\n"))
+        self.core.send_laser.connect(
+            lambda v: self._write(f"L{v:07.2f}\r\n")
+        )
+        self.core.send_plc.connect(
+            lambda p, s: self._write(f"PLC:{p},{s}\r\n")
+        )
 
-        # 🔔 IMPORTANT: emit the initial PLC state AFTER connections so it's not lost
-        # Small delay to ensure QThread / event loop is stable
-        QTimer.singleShot(200, lambda: self.core.send_plc.emit(self.core.manual_power, self.core.manual_status))
+        # Emit initial PLC state
+        QTimer.singleShot(
+            200,
+            lambda: self.core.send_plc.emit(
+                self.core.manual_power,
+                self.core.manual_status
+            )
+        )
 
-        # Enter the thread event loop (exec will keep this QThread alive and process timers)
         self.exec()
 
-        # Cleanup
         self.ser.close()
         print("✅ Simulator → Serial closed")
 
@@ -195,7 +257,7 @@ class SerialWriter(QThread):
         try:
             self.ser.write(text.encode("ascii"))
             self.ser.flush()
-        except:
+        except Exception:
             pass
 
     def stop(self):
@@ -205,14 +267,16 @@ class SerialWriter(QThread):
         self.wait(2000)
 
 
-# ================================
+# ======================================================
+# MAIN ENTRY
+# ======================================================
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     print("=" * 70)
-    print("PNEUMATIC + PLC SIMULATOR — FINAL v4 (MANUAL PLC)")
+    print("PNEUMATIC + PLC SIMULATOR — FINAL v5 (WELDING-AWARE)")
     print("Writes to COM5 → VSPE → COM6")
-    print("Manual PLC + Auto Laser")
+    print("Manual PLC + Welding Laser Simulation")
     print("CTRL+C SAFE SHUTDOWN ENABLED")
     print("=" * 70)
 
@@ -223,10 +287,8 @@ if __name__ == "__main__":
         print("\n🛑 Stopping simulator...")
         writer.stop()
 
-    # ✅ Qt shutdown
     app.aboutToQuit.connect(cleanup)
 
-    # ✅ Ctrl + C shutdown
     def sigint_handler(sig, frame):
         print("\n🛑 Ctrl+C detected → Closing simulator cleanly...")
         app.quit()

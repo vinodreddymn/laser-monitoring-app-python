@@ -1,12 +1,19 @@
-# gui/windows/change_password_tab.py
-
 import logging
+from typing import Optional
+
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QFormLayout,
-    QLineEdit, QPushButton, QMessageBox, QLabel
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,   # <-- ADD THIS
+    QFormLayout,
+    QLineEdit,
+    QPushButton,
+    QMessageBox,
+    QLabel,
+    QFrame
 )
+
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
 
 from config.app_config import (
     verify_settings_password,
@@ -19,89 +26,104 @@ log = logging.getLogger(__name__)
 
 class ChangePasswordTab(QWidget):
     """
-    Change Settings Password Tab
+    Change Settings Password – Supervisor Access
 
-    Purpose:
-    - Allow admin to change settings password
-    - Plain-text password (intentional for kiosk system)
+    Purpose
+    -------
+    • Change system settings password
+    • Used to protect configuration screens
+    • Plain-text password (intentional for kiosk systems)
 
-    Styling:
-    - Internal (apply_base_dialog_style)
+    Design
+    ------
+    • Clear instructions
+    • No ambiguity
+    • Stable, distraction-free UI
     """
 
+    # --------------------------------------------------
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self._build_ui()
         apply_base_dialog_style(self)
 
-    # --------------------------------------------------
+    # ==================================================
     # UI
-    # --------------------------------------------------
+    # ==================================================
     def _build_ui(self):
         root = QVBoxLayout(self)
         root.setContentsMargins(28, 28, 28, 28)
-        root.setSpacing(20)
+        root.setSpacing(22)
 
-        # ---------------- Title ----------------
-        title = QLabel("Change Settings Password")
-        title.setObjectName("SectionTitle")
-        title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
-        title.setAlignment(Qt.AlignLeft)
+        # ---------------- Header ----------------
+        header = QLabel("Change Settings Password")
+        header.setObjectName("SectionTitle")
 
         subtitle = QLabel(
-            "This password is required to access system settings."
+            "This password protects access to system configuration screens."
         )
         subtitle.setObjectName("MutedText")
 
-        root.addWidget(title)
+        root.addWidget(header)
         root.addWidget(subtitle)
+
+        # ---------------- Divider ----------------
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        divider.setFrameShadow(QFrame.Sunken)
+        root.addWidget(divider)
 
         # ---------------- Form ----------------
         form = QFormLayout()
-        form.setSpacing(14)
+        form.setSpacing(16)
         form.setLabelAlignment(Qt.AlignRight)
 
         self.current_pwd = QLineEdit()
         self.current_pwd.setEchoMode(QLineEdit.Password)
-        self.current_pwd.setPlaceholderText("Enter current password")
+        self.current_pwd.setPlaceholderText("Current password")
 
         self.new_pwd = QLineEdit()
         self.new_pwd.setEchoMode(QLineEdit.Password)
-        self.new_pwd.setPlaceholderText("Enter new password")
+        self.new_pwd.setPlaceholderText("New password")
 
         self.confirm_pwd = QLineEdit()
         self.confirm_pwd.setEchoMode(QLineEdit.Password)
-        self.confirm_pwd.setPlaceholderText("Re-enter new password")
+        self.confirm_pwd.setPlaceholderText("Confirm new password")
 
-        form.addRow("Current Password:", self.current_pwd)
-        form.addRow("New Password:", self.new_pwd)
-        form.addRow("Confirm Password:", self.confirm_pwd)
+        form.addRow("Current Password", self.current_pwd)
+        form.addRow("New Password", self.new_pwd)
+        form.addRow("Confirm Password", self.confirm_pwd)
 
         root.addLayout(form)
 
-        # ---------------- Action Button ----------------
+        # ---------------- Action Row ----------------
+        action_row = QHBoxLayout()
         self.btn_change = QPushButton("Update Password")
         self.btn_change.setProperty("role", "primary")
-        self.btn_change.setFixedWidth(200)
+        self.btn_change.setMinimumWidth(220)
         self.btn_change.clicked.connect(self._change_password)
 
-        root.addWidget(self.btn_change, alignment=Qt.AlignLeft)
+        action_row.addWidget(self.btn_change)
+        action_row.addStretch()
+
+        root.addLayout(action_row)
         root.addStretch()
 
-    # --------------------------------------------------
-    # Logic
-    # --------------------------------------------------
+    # ==================================================
+    # LOGIC
+    # ==================================================
     def _change_password(self):
         current = self.current_pwd.text().strip()
         new = self.new_pwd.text().strip()
         confirm = self.confirm_pwd.text().strip()
 
+        # ---------------- Validation ----------------
         if not current or not new or not confirm:
             QMessageBox.warning(
                 self,
                 "Missing Information",
-                "All fields are required."
+                "All password fields are required."
             )
             return
 
@@ -117,29 +139,36 @@ class ChangePasswordTab(QWidget):
         if new != confirm:
             QMessageBox.warning(
                 self,
-                "Mismatch",
+                "Password Mismatch",
                 "New password and confirmation do not match."
             )
             self.confirm_pwd.setFocus()
             return
 
+        # ---------------- Update ----------------
         try:
             update_settings_password(new)
 
             QMessageBox.information(
                 self,
                 "Password Updated",
-                "Settings password updated successfully."
+                "Settings password has been updated successfully."
             )
 
-            self.current_pwd.clear()
-            self.new_pwd.clear()
-            self.confirm_pwd.clear()
+            self._clear_fields()
 
         except Exception:
-            log.exception("Password update failed")
+            log.exception("Settings password update failed")
             QMessageBox.critical(
                 self,
-                "Error",
-                "Failed to update password."
+                "Update Failed",
+                "Unable to update the settings password.\n"
+                "Please check system logs."
             )
+
+    # --------------------------------------------------
+    def _clear_fields(self):
+        self.current_pwd.clear()
+        self.new_pwd.clear()
+        self.confirm_pwd.clear()
+        self.current_pwd.setFocus()
