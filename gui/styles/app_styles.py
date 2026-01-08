@@ -1,23 +1,26 @@
 def apply_base_dialog_style(widget):
     """
-    Simplified industrial dark theme for factory floor use.
+    Simple, professional industrial dark theme.
 
-    Goals:
-    - High readability
+    Design goals:
+    - Calm, low-fatigue visuals
+    - High readability on factory floor
     - Stable layout (no hover jitter)
-    - Clear table structure
-    - Minimal styling rules
     - Easy long-term maintenance
     """
     widget.setStyleSheet("""
     /* =================================================
        GLOBAL BASE
        ================================================= */
-    QWidget, QDialog {
+    QWidget {
         background-color: #020617;
         color: #e5e7eb;
         font-family: "Segoe UI", Arial, sans-serif;
-        font-size: 16px;
+        font-size: 18px;
+    }
+
+    QDialog {
+        border: 2px solid #334155;
     }
 
     QFrame {
@@ -25,24 +28,29 @@ def apply_base_dialog_style(widget):
     }
 
     /* =================================================
-       TEXT HIERARCHY
+       HEADERS
        ================================================= */
+    QFrame#HeaderFrame {
+        background-color: #0b1220;
+        border-bottom: 2px solid #334155;
+        padding: 14px 20px;
+    }
+
     QLabel#DialogTitle {
-        font-size: 24px;
-        font-weight: 700;
+        font-size: 22px;
+        font-weight: 600;
         color: #f8fafc;
-        padding: 6px 0;
     }
 
     QLabel#SectionTitle {
-        font-size: 20px;
+        font-size: 18px;
         font-weight: 600;
         color: #e2e8f0;
-        padding: 6px 0;
+        margin-top: 10px;
     }
 
     QLabel#MutedText {
-        font-size: 15px;
+        font-size: 14px;
         color: #94a3b8;
     }
 
@@ -58,7 +66,7 @@ def apply_base_dialog_style(widget):
         border: 1px solid #334155;
         border-radius: 6px;
         padding: 8px 12px;
-        min-height: 38px;
+        min-height: 36px;
     }
 
     QLineEdit:focus,
@@ -66,6 +74,7 @@ def apply_base_dialog_style(widget):
     QSpinBox:focus,
     QDoubleSpinBox:focus {
         border-color: #60a5fa;
+        outline: none;
     }
 
     QLineEdit:disabled,
@@ -74,70 +83,71 @@ def apply_base_dialog_style(widget):
         border-color: #1e293b;
     }
 
-    /* Dropdown list */
     QComboBox QAbstractItemView {
         background-color: #020617;
-        color: #e5e7eb;
         border: 1px solid #334155;
         selection-background-color: #1e293b;
-        selection-color: #f8fafc;
     }
 
     /* =================================================
-       BUTTONS (NO HOVER EFFECTS)
-       ================================================= */
+   BUTTONS
+   ================================================= */
     QPushButton {
-        background-color: #1e293b;
+        background-color: #0f172a;
         color: #f8fafc;
-        border: none;
+        border: 1px solid #334155;
         border-radius: 6px;
         padding: 8px 18px;
-        min-height: 38px;
+        min-height: 36px;
         font-weight: 600;
     }
 
+    QPushButton:hover {
+        background-color: #1e293b;
+    }
+
     QPushButton:pressed {
-        background-color: #0f172a;
+        background-color: #020617;
     }
 
     QPushButton[role="primary"] {
-        background-color: #2563eb;
+        background-color: #1d4ed8;
+        border-color: #3b82f6;
     }
 
     QPushButton[role="success"] {
-        background-color: #16a34a;
+        background-color: #15803d;
+        border-color: #22c55e;
     }
 
     QPushButton[role="danger"] {
-        background-color: #dc2626;
+        background-color: #b91c1c;
+        border-color: #ef4444;
     }
 
-    QPushButton:disabled {
-        background-color: #1e293b;
-        color: #64748b;
-    }
-
-    /* Compact buttons inside tables */
+    /* ===== TABLE ACTION BUTTONS ===== */
     QTableWidget QPushButton {
-        padding: 4px 10px;
-        min-height: 30px;
+        min-width: 90px;
+        min-height: 28px;
+        padding: 4px 12px;
         font-size: 14px;
+        font-weight: 600;
     }
+
 
     /* =================================================
-       TABLES – CLEAR BORDERS
+       TABLES
        ================================================= */
     QTableWidget {
         background-color: #020617;
-        border: 2px solid #334155;     /* outer border */
+        border: 2px solid #334155;
         gridline-color: #334155;
-        font-size: 16px;
+        font-size: 17px;
     }
 
     QTableWidget::item {
         padding: 10px;
         border-bottom: 1px solid #334155;
-        border-right: 1px solid #1e293b;
     }
 
     QTableWidget::item:selected {
@@ -146,12 +156,12 @@ def apply_base_dialog_style(widget):
     }
 
     QHeaderView::section {
-        background-color: #020617;
+        background-color: #0b1220;
         color: #cbd5f5;
         padding: 10px;
         font-weight: 600;
-        border-right: 1px solid #334155;
         border-bottom: 2px solid #334155;
+        border-right: 1px solid #334155;
     }
 
     QHeaderView::section:last {
@@ -162,17 +172,22 @@ def apply_base_dialog_style(widget):
        TABS
        ================================================= */
     QTabWidget::pane {
-        border: 1px solid #334155;
+        border: 2px solid #334155;
+        background-color: #020617;
     }
 
     QTabBar::tab {
         background-color: #020617;
         color: #94a3b8;
         padding: 10px 24px;
-        font-size: 16px;
+        font-size: 17px;
+        border: 1px solid #334155;
+        border-bottom: none;
+        margin-right: 2px;
     }
 
     QTabBar::tab:selected {
+        background-color: #0f172a;
         color: #60a5fa;
         border-bottom: 3px solid #60a5fa;
         font-weight: 600;
@@ -197,14 +212,72 @@ def apply_base_dialog_style(widget):
     }
 
     /* =================================================
-       MESSAGE BOXES
-       ================================================= */
+   MESSAGE BOXES – ROLE AWARE (SHUTDOWN SAFE)
+   ================================================= */
     QMessageBox {
         background-color: #020617;
         color: #e5e7eb;
+        border: 2px solid #334155;
+        font-size: 18px;
     }
 
-    QMessageBox QPushButton {
-        min-width: 90px;
+    /* Message text */
+    QMessageBox QLabel#qt_msgbox_label {
+        min-width: 420px;
+        line-height: 1.4;
+        padding: 8px 0;
     }
+
+    /* Icon spacing */
+    QMessageBox QLabel#qt_msgboxex_icon_label {
+        padding-right: 12px;
+    }
+
+    /* -------------------------------------------------
+    Buttons – Base
+    ------------------------------------------------- */
+    QMessageBox QPushButton {
+        min-width: 120px;
+        min-height: 38px;
+        padding: 6px 20px;
+        font-weight: 600;
+        border-radius: 6px;
+    }
+
+    /* -------------------------------------------------
+    Primary (Cancel / Safe Action)
+    ------------------------------------------------- */
+    QMessageBox QPushButton[role="primary"] {
+        background-color: #1d4ed8;
+        border: 1px solid #3b82f6;
+        color: #f8fafc;
+    }
+
+    QMessageBox QPushButton[role="primary"]:hover {
+        background-color: #2563eb;
+    }
+
+    /* -------------------------------------------------
+    Danger (Shutdown / Destructive)
+    ------------------------------------------------- */
+    QMessageBox QPushButton[role="danger"] {
+        background-color: #b91c1c;
+        border: 1px solid #ef4444;
+        color: #fef2f2;
+    }
+
+    QMessageBox QPushButton[role="danger"]:hover {
+        background-color: #dc2626;
+    }
+
+    /* -------------------------------------------------
+    Default fallback
+    ------------------------------------------------- */
+    QMessageBox QPushButton:!enabled {
+        background-color: #0f172a;
+        color: #64748b;
+        border-color: #374151;
+    }
+
+
     """)

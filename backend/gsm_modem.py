@@ -24,17 +24,10 @@ log = logging.getLogger(__name__)
 # ======================================================
 # CONFIG
 # ======================================================
-CONFIG_FILE = Path(__file__).parent / "peripherals_config.json"
 
-def load_config():
-    if CONFIG_FILE.exists():
-        with open(CONFIG_FILE, "r") as f:
-            return json.load(f)
-    return {"gsm_port": "COM1"}
+from config.app_config import DEFAULT_GSM_PORT, DEFAULT_BAUD_GSM
 
-config = load_config()
-
-GSM_PORT = config["gsm_port"]
+GSM_PORT = DEFAULT_GSM_PORT
 GSM_BAUD = DEFAULT_BAUD_GSM
 
 

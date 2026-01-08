@@ -147,12 +147,21 @@ class CyclesPanel(QFrame):
 
         card = QFrame()
         card.setFixedHeight(self.CARD_HEIGHT)
+        
+        # CRITICAL FIX: Ensure card background is solid and consistent
         card.setStyleSheet(f"""
             QFrame {{
-                background: #111827;
+                background-color: #111827;     /* Use background-color, not just background */
                 border-radius: 10px;
                 border-left: 6px solid {accent};
                 border: 1px solid #1f2937;
+            }}
+            /* Remove any inherited or default widget backgrounds inside */
+            QLabel {{
+                background: transparent;
+                border: none;
+                padding: 0;
+                margin: 0;
             }}
         """)
 
@@ -162,26 +171,31 @@ class CyclesPanel(QFrame):
 
         # ----- LEFT -----
         left = QVBoxLayout()
-        left.setSpacing(2)
+        left.setSpacing(4)  # Slightly increased for better readability
 
-        status_lbl = QLabel(status or "—")
-        status_lbl.setFont(QFont("Segoe UI", 15, QFont.Bold))
-        status_lbl.setStyleSheet(f"color:{accent};")
-        left.addWidget(status_lbl)
+        # Model name with depth
+        model_name = cycle.get("model_name") or "Unknown"
+        depth = cycle.get("peak_height")
+        depth_str = f"({depth:.2f} mm)" if depth is not None else "(— mm)"
+        model_with_depth = f"{model_name} {depth_str}"
 
-        model_lbl = QLabel(cycle.get("model_name") or "Unknown")
-        model_lbl.setFont(QFont("Segoe UI", 12))
-        model_lbl.setStyleSheet(f"color:{fg_main};")
+        model_lbl = QLabel(model_with_depth)
+        model_lbl.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        model_lbl.setStyleSheet(f"color: {accent}; background: transparent;")
         left.addWidget(model_lbl)
 
         time_lbl = QLabel(self._format_timestamp(cycle.get("timestamp")))
-        time_lbl.setFont(QFont("Segoe UI", 10))
-        time_lbl.setStyleSheet(f"color:{fg_muted};")
+        time_lbl.setFont(QFont("Segoe UI", 12))
+        time_lbl.setStyleSheet(f"color: {fg_muted}; background: transparent;")
         left.addWidget(time_lbl)
 
         layout.addLayout(left, stretch=1)
 
         # ----- RIGHT -----
+        right_label = QLabel()
+        right_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        right_label.setFont(QFont("Consolas", 20 if is_pass else 12, QFont.Bold if is_pass else QFont.Normal))
+        
         if is_pass:
             qr_value = (
                 cycle.get("qr_text")
@@ -189,20 +203,23 @@ class CyclesPanel(QFrame):
                 or cycle.get("qr")
                 or "—"
             )
-            qr = QLabel(qr_value)
-            qr.setFont(QFont("Consolas", 20, QFont.Bold))
-            qr.setStyleSheet("color:#00f5a0;")
-            qr.setWordWrap(False)
+            right_label.setText(qr_value)
+            right_label.setStyleSheet("""
+                color: #00f5a0;
+                background: transparent;
+                font-style: normal;
+            """)
         else:
-            qr = QLabel("No QR generated")
-            qr.setFont(QFont("Segoe UI", 12))
-            qr.setStyleSheet("color:#f87171; font-style:italic;")
+            right_label.setText("No QR generated")
+            right_label.setStyleSheet("""
+                color: #f87171;
+                background: transparent;
+                font-style: italic;
+            """)
 
-        qr.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        layout.addWidget(qr, stretch=2)
+        layout.addWidget(right_label, stretch=2)
 
         return card
-
     # --------------------------------------------------
     @staticmethod
     def _format_timestamp(ts) -> str:

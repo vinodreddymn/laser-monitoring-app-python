@@ -24,17 +24,9 @@ log = logging.getLogger(__name__)
 # CONFIG
 # ======================================================
 
-CONFIG_FILE = Path(__file__).parent / "peripherals_config.json"
+from config.app_config import DEFAULT_PLC_PORT, DEFAULT_BAUD_PLC
 
-def load_config():
-    if CONFIG_FILE.exists():
-        with open(CONFIG_FILE, "r") as f:
-            return json.load(f)
-    return {"plc_port": "COM6"}
-
-config = load_config()
-
-PLC_PORT = config.get("plc_port", "COM6")
+PLC_PORT = DEFAULT_PLC_PORT
 PLC_BAUD = DEFAULT_BAUD_PLC
 
 

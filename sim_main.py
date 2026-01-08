@@ -1,15 +1,11 @@
 # ======================================================
-# main.py — FINAL PRODUCTION VERSION v2.4.0
+# main.py — FINAL PRODUCTION VERSION v2.5.0
 # Pneumatic Laser QC System
 # ======================================================
 """
 Main entry point for the Pneumatic Laser QC System.
 
-Responsibilities:
-- Application bootstrap
-- Global signal bus
-- Backend service startup/shutdown
-- Dummy global styling only
+Now automatically starts and stops the combined simulator.
 """
 
 import sys
@@ -19,7 +15,7 @@ import logging
 from pathlib import Path
 
 # ------------------------------------------------------
-# Qt: suppress noisy QSS warnings (expected in dummy QSS)
+# Qt: suppress noisy QSS warnings
 # ------------------------------------------------------
 os.environ["QT_LOGGING_RULES"] = "qt.qss.debug=false"
 
@@ -79,10 +75,6 @@ def load_fonts():
 
 
 def apply_dummy_stylesheet(app: QApplication):
-    """
-    Applies ONLY a neutral base stylesheet.
-    All real styling is widget-owned.
-    """
     qss = BASE_DIR / "styles.qss"
 
     if not qss.exists():
@@ -93,9 +85,8 @@ def apply_dummy_stylesheet(app: QApplication):
     log.info("Dummy global stylesheet applied: %s", qss.name)
 
 
-
 # ======================================================
-# BACKEND IMPORTS (AFTER LOGGING)
+# BACKEND IMPORTS
 # ======================================================
 from backend.detector import init_detector, push_laser_value, update_threshold
 from backend.cycle_service import handle_detected_cycle
@@ -105,6 +96,9 @@ from backend.sms_sender import start_sms_sender, stop_sms_sender
 from backend.gsm_modem import gsm
 from backend.settings_dao import get_settings
 from backend.purge_service import run_purge
+
+# NEW: Simulator auto-start/stop
+from backend.simulator import SimulatorThread
 
 from config.app_config import APP_READ_PORT, GSM_APP_PORT
 from gui.main_window import MainWindow
@@ -122,7 +116,8 @@ def on_plc_status_update(status: dict):
 # ======================================================
 def main():
     log.info("=" * 64)
-    log.info("Starting Pneumatic Laser QC System")
+    log.info("Starting Pneumatic Laser QC System v2.5.0")
+    log.info("With automatic simulator start/stop")
     log.info("=" * 64)
 
     # --------------------------------------------------
@@ -155,6 +150,11 @@ def main():
         sys.exit(1)
 
     # --------------------------------------------------
+    # Track background threads for clean shutdown
+    # --------------------------------------------------
+    background_threads = []
+
+    # --------------------------------------------------
     # Startup self-checks
     # --------------------------------------------------
     try:
@@ -182,7 +182,6 @@ def main():
     threshold = float(settings.get("laser_threshold", 1.0))
     init_detector(lambda cycle: handle_detected_cycle(cycle, signals))
     update_threshold(threshold)
-
     log.info("Detector initialized (threshold=%s)", threshold)
 
     # --------------------------------------------------
@@ -213,34 +212,63 @@ def main():
         log.exception("SMS sender start failed")
 
     # --------------------------------------------------
+    # AUTOMATIC SIMULATOR START
+    # --------------------------------------------------
+    try:
+        simulator_thread = SimulatorThread(port="COM5")
+        simulator_thread.start()
+        background_threads.append(simulator_thread)
+        log.info("Combined simulator automatically started (writes to COM5 → VSPE → COM6)")
+    except Exception:
+        log.exception("Failed to start simulator")
+
+    # --------------------------------------------------
     # Graceful shutdown handler
     # --------------------------------------------------
     def shutdown():
-        log.info("Shutdown initiated")
+        log.info("Shutdown initiated - stopping all services")
 
-        steps = [
-            (purge_timer.stop, "Purge timer"),
-            (combined_reader.stop, "Serial reader"),
-            (stop_sms_sender, "SMS sender"),
-        ]
+        # Stop timers first
+        try:
+            purge_timer.stop()
+            log.info("Purge timer stopped")
+        except Exception:
+            log.exception("Failed stopping purge timer")
 
-        for action, name in steps:
+        # Stop all background threads (simulator, reader, etc.)
+        for thread in background_threads:
             try:
-                action()
-                log.info("%s stopped", name)
+                thread.stop()
+                log.info("Background thread stopped")
             except Exception:
-                log.exception("Failed stopping %s", name)
+                log.exception("Failed stopping background thread")
 
+        # Stop serial reader
+        try:
+            combined_reader.stop()
+            log.info("Serial reader stopped")
+        except Exception:
+            log.exception("Failed stopping serial reader")
+
+        # Stop SMS sender
+        try:
+            stop_sms_sender()
+            log.info("SMS sender stopped")
+        except Exception:
+            log.exception("Failed stopping SMS sender")
+
+        # Stop GSM modem
         try:
             gsm.stop()
             log.info("GSM modem stopped")
         except Exception:
             log.exception("GSM modem shutdown failed")
 
-        log.info("Shutdown complete")
+        log.info("Shutdown complete - all services stopped cleanly")
 
     app.aboutToQuit.connect(shutdown)
 
+    # Handle Ctrl+C on non-Windows
     if os.name != "nt":
         signal.signal(signal.SIGINT, lambda *_: app.quit())
 
@@ -248,8 +276,9 @@ def main():
     # System ready
     # --------------------------------------------------
     log.info("SYSTEM FULLY OPERATIONAL")
-    log.info("Laser / PLC → %s", APP_READ_PORT)
-    log.info("GSM App     → %s", GSM_APP_PORT)
+    log.info("Laser / PLC communication → %s", APP_READ_PORT)
+    log.info("GSM App communication     → %s", GSM_APP_PORT)
+    log.info("Simulator running in background (manual PLC input active in console)")
 
     sys.exit(app.exec())
 

@@ -34,8 +34,8 @@ class ModelEditDialog(QDialog):
     • Stable UI (no hover)
     """
 
-    WIDTH = 800
-    HEIGHT = 660
+    WIDTH = 900
+    HEIGHT = 700
 
     # --------------------------------------------------
     def __init__(self, parent=None, model: Optional[Dict] = None):

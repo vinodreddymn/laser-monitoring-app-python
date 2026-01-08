@@ -18,13 +18,15 @@ from backend.cycles_dao import (
 )
 from backend.live_print import try_print_live_cycle
 
+from gui.styles.app_styles import apply_base_dialog_style
+
 log = logging.getLogger(__name__)
 
 
 class PendingQRPrintWindow(QDialog):
     """
     Modal window to manually print pending QR codes.
-    Uses self-contained styling (NO global QSS).
+    Uses shared styling for uniformity.
     """
 
     def __init__(self, parent=None):
@@ -32,91 +34,11 @@ class PendingQRPrintWindow(QDialog):
 
         self.setWindowTitle("Pending QR Labels")
         self.setModal(True)
-        self.setMinimumSize(950, 450)
+        self.setMinimumSize(1000, 500)
 
-        self.setStyleSheet(self._style())
         self._build_ui()
+        apply_base_dialog_style(self)
         self.refresh()
-
-    # --------------------------------------------------
-    def _style(self) -> str:
-        return """
-        QDialog {
-            background-color: #0b1220;
-            color: #e5e7eb;
-            font-family: "Segoe UI";
-            font-size: 13px;
-        }
-
-        QLabel#Title {
-            font-size: 18px;
-            font-weight: 700;
-            color: #fbbf24;
-        }
-
-        QTableWidget::item {
-            color: #e5e7eb;
-            padding-left: 6px;
-        }
-
-        QLabel#Info {
-            color: #94a3b8;
-            font-size: 14px;
-        }
-
-        QTableWidget {
-            background-color: #020617;
-            border: 1px solid #334155;
-            gridline-color: #1e293b;
-            selection-background-color: #164e63;
-            selection-color: #ecfeff;
-        }
-
-        QHeaderView::section {
-            background-color: #0f172a;
-            color: #93c5fd;
-            font-weight: 600;
-            border: 1px solid #1e293b;
-            padding: 6px;
-        }
-
-        QPushButton {
-            background-color: #1f2933;
-            color: #e5e7eb;
-            border: 1px solid #334155;
-            border-radius: 6px;
-            padding: 6px 14px;
-            font-weight: 600;
-        }
-
-        QPushButton:hover {
-            background-color: #334155;
-        }
-
-        QPushButton:pressed {
-            background-color: #020617;
-        }
-
-        QPushButton#printBtn {
-            background-color: #065f46;
-            border-color: #10b981;
-            color: #ecfeff;
-        }
-
-        QPushButton#printBtn:hover {
-            background-color: #047857;
-        }
-
-        QPushButton#closeBtn {
-            background-color: #7c2d12;
-            border-color: #fb923c;
-            color: #fff7ed;
-        }
-
-        QPushButton#closeBtn:hover {
-            background-color: #9a3412;
-        }
-        """
 
     # --------------------------------------------------
     def _build_ui(self):

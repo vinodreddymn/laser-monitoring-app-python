@@ -74,7 +74,13 @@ class ChangePasswordTab(QWidget):
         divider.setFrameShadow(QFrame.Sunken)
         root.addWidget(divider)
 
-        # ---------------- Form ----------------
+        # ---------------- Form Frame ----------------
+        form_frame = QFrame()
+        form_frame.setFrameShape(QFrame.StyledPanel)
+        form_frame.setStyleSheet("QFrame { border: 1px solid #334155; background-color: #0f172a; }")
+        form_layout = QVBoxLayout(form_frame)
+        form_layout.setContentsMargins(20, 20, 20, 20)
+
         form = QFormLayout()
         form.setSpacing(16)
         form.setLabelAlignment(Qt.AlignRight)
@@ -95,7 +101,8 @@ class ChangePasswordTab(QWidget):
         form.addRow("New Password", self.new_pwd)
         form.addRow("Confirm Password", self.confirm_pwd)
 
-        root.addLayout(form)
+        form_layout.addLayout(form)
+        root.addWidget(form_frame)
 
         # ---------------- Action Row ----------------
         action_row = QHBoxLayout()

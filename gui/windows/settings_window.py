@@ -43,7 +43,7 @@ class SettingsWindow(QDialog):
     settings_applied = Signal(dict)
 
     WIDTH = 1280
-    HEIGHT = 820
+    HEIGHT = 1000
 
     # ==================================================
     def __init__(self, parent=None):
@@ -91,6 +91,7 @@ class SettingsWindow(QDialog):
     # --------------------------------------------------
     def _build_header(self) -> QFrame:
         frame = QFrame()
+        frame.setObjectName("HeaderFrame")
         layout = QHBoxLayout(frame)
         layout.setContentsMargins(0, 0, 0, 8)
         layout.setSpacing(12)

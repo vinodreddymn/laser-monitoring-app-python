@@ -1,7 +1,8 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QDialog, QMessageBox
+    QWidget, QVBoxLayout, QHBoxLayout, QDialog, QMessageBox, QLabel, QPushButton
 )
 from PySide6.QtCore import Qt, QTimer, QDateTime, Slot
+from PySide6.QtGui import QFont
 
 from backend.models_dao import get_active_model
 from backend.cycles_dao import get_cycles
@@ -14,13 +15,86 @@ from config.app_config import WINDOW_TITLE
 
 from gui.windows.settings_window import SettingsWindow
 from gui.windows.password_modal import PasswordModal
+from gui.windows.pending_qr_print_window import PendingQRPrintWindow
 from gui.widgets.plot_panel import PlotPanel
 from gui.widgets.result_panel import ResultPanel
 from gui.widgets.cycles_panel import CyclesPanel
 from gui.widgets.footer_widget import FooterWidget
 from gui.widgets.header_widget import HeaderWidget
-from gui.windows.pending_qr_print_window import PendingQRPrintWindow
+from gui.styles.app_styles import apply_base_dialog_style
 
+
+
+# ============================================================
+# SHUTDOWN CONFIRMATION DIALOG
+# ============================================================
+class ShutdownConfirmDialog(QDialog):
+    """
+    Shutdown Confirmation Dialog – Industrial HMI Uniform
+
+    • Consistent with other dialogs
+    • Clear warning text
+    • Factory-safe styling
+    """
+
+    WIDTH = 700
+    HEIGHT = 420
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.setObjectName("ShutdownConfirmDialog")
+        self.setWindowTitle("Confirm System Shutdown")
+        self.setModal(True)
+        self.setFixedSize(self.WIDTH, self.HEIGHT)
+
+        self._build_ui()
+        apply_base_dialog_style(self)
+
+        # Override fonts for larger text
+        self.title.setStyleSheet("font-size: 28pt; font-weight: bold; color: #f8fafc;")
+        self.warning.setStyleSheet("font-size: 18pt; color: #94a3b8;")
+
+    def _build_ui(self):
+        root = QVBoxLayout(self)
+        root.setContentsMargins(28, 28, 28, 28)
+        root.setSpacing(22)
+
+        # ---------------- Title ----------------
+        self.title = QLabel("Exit Pneumatic Laser QC System?")
+        self.title.setObjectName("DialogTitle")
+        self.title.setAlignment(Qt.AlignCenter)
+        root.addWidget(self.title)
+
+        # ---------------- Warning Text ----------------
+        self.warning = QLabel(
+            "This will safely stop all system services and power down the application.\n\n"
+            "Ensure no active welding cycle is in progress."
+        )
+        self.warning.setObjectName("MutedText")
+        self.warning.setAlignment(Qt.AlignCenter)
+        self.warning.setWordWrap(True)
+        root.addWidget(self.warning)
+
+        root.addStretch()
+
+        # ---------------- Buttons ----------------
+        button_row = QHBoxLayout()
+        button_row.setSpacing(12)
+
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setProperty("role", "secondary")
+        self.cancel_btn.clicked.connect(self.reject)
+
+        self.shutdown_btn = QPushButton("Shutdown System")
+        self.shutdown_btn.setProperty("role", "danger")
+        self.shutdown_btn.clicked.connect(self.accept)
+
+        button_row.addStretch()
+        button_row.addWidget(self.cancel_btn)
+        button_row.addWidget(self.shutdown_btn)
+
+        root.addLayout(button_row)
 
 
 class MainWindow(QWidget):
@@ -33,7 +107,7 @@ class MainWindow(QWidget):
     - Deterministic layout
     """
 
-    KIOSK_MODE = False  # Set to True for kiosk mode
+    KIOSK_MODE = True  # Set to True for kiosk mode
 
     def __init__(self, signals):
         super().__init__()
@@ -142,23 +216,17 @@ class MainWindow(QWidget):
         dlg.exec()
 
     # ============================================================
-    # SHUTDOWN
+    # SHUTDOWN (ENHANCED, FACTORY SAFE – UNIFORM DIALOG)
     # ============================================================
     def request_shutdown(self):
         pwd = PasswordModal(self)
         if pwd.exec() != QDialog.Accepted:
             return
 
-        reply = QMessageBox.question(
-            self,
-            "Confirm Shutdown",
-            "Exit application?\n\nMonitoring will stop.",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-
-        if reply == QMessageBox.Yes:
+        dlg = ShutdownConfirmDialog(self)
+        if dlg.exec() == QDialog.Accepted:
             self.close()
+
 
 
     # ============================================================

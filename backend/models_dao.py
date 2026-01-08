@@ -42,13 +42,15 @@ def add_model(
     Add a new model.
     model_type examples: RHD, LHD
     """
-    return query(
+    result = query(
         """
         INSERT INTO models (name, model_type, lower_limit, upper_limit)
         VALUES (%s, %s, %s, %s)
         """,
         (name, model_type, lower_limit, upper_limit)
     )
+    log.info("Added model: %s (%s) limits %.2f-%.2f", name, model_type, lower_limit, upper_limit)
+    return result
 
 
 def update_model(
@@ -61,7 +63,7 @@ def update_model(
     """
     Update an existing model.
     """
-    return query(
+    result = query(
         """
         UPDATE models
         SET name = %s,
@@ -72,16 +74,20 @@ def update_model(
         """,
         (name, model_type, lower_limit, upper_limit, model_id)
     )
+    log.info("Updated model %s: %s (%s) limits %.2f-%.2f", model_id, name, model_type, lower_limit, upper_limit)
+    return result
 
 
 def delete_model(model_id: int) -> int:
     """
     Delete a model by ID.
     """
-    return query(
+    result = query(
         "DELETE FROM models WHERE id = %s",
         (model_id,)
     )
+    log.info("Deleted model %s", model_id)
+    return result
 
 
 # ---------------------------------------------------------------------------

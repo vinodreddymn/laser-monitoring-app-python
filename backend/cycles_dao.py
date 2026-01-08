@@ -105,7 +105,7 @@ def log_cycle(cycle: dict) -> int:
         or "Unknown"
     )
 
-    return query(
+    cycle_id = query(
         """
         INSERT INTO cycles
             (timestamp, model_id, model_name, peak_height, pass_fail, qr_code)
@@ -120,6 +120,8 @@ def log_cycle(cycle: dict) -> int:
             cycle.get("qr_text"),
         ),
     )
+    log.info("Logged cycle %s for model %s: peak=%.2f, pass=%s", cycle_id, model_name, cycle.get("peak_height"), cycle.get("pass_fail"))
+    return cycle_id
 
 
 def get_cycles(limit: int = 50) -> list:

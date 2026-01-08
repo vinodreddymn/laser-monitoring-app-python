@@ -12,10 +12,12 @@ def ensure_folder():
 
 def save_qr_code(filename: str, qr_text: str) -> int:
     ensure_folder()
-    return query(
+    result = query(
         "INSERT INTO qr_codes (filename, qr_data) VALUES (%s, %s)",
         (filename, qr_text)
     )
+    log.info("Saved QR code %s for text: %s", result, qr_text[:20] + "..." if len(qr_text) > 20 else qr_text)
+    return result
 
 def get_qr_code(qr_id: int) -> dict:
     return query("SELECT * FROM qr_codes WHERE id = %s", (qr_id,), fetch_one=True)

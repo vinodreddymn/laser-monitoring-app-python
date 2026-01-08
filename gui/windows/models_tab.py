@@ -1,3 +1,4 @@
+from logging import root
 from typing import Optional, List, Dict
 
 from PySide6.QtWidgets import (
@@ -92,25 +93,44 @@ class ModelsTab(QWidget):
             "Delete"
         ])
 
+        # -------- Behavior --------
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.setShowGrid(False)
+        self.table.setAlternatingRowColors(True)
 
-        header_view = self.table.horizontalHeader()
-        header_view.setSectionResizeMode(0, QHeaderView.Stretch)
-        header_view.setSectionResizeMode(1, QHeaderView.Fixed)
-        header_view.setSectionResizeMode(2, QHeaderView.Stretch)
-        header_view.setSectionResizeMode(3, QHeaderView.Fixed)
+        # -------- Header setup --------
+        header = self.table.horizontalHeader()
 
-        for col in (4, 5, 6):
-            header_view.setSectionResizeMode(col, QHeaderView.Fixed)
-            self.table.setColumnWidth(col, 110)
+        header.setSectionResizeMode(0, QHeaderView.Fixed)    # Model Name
+        header.setSectionResizeMode(1, QHeaderView.Fixed)    # Type
+        header.setSectionResizeMode(2, QHeaderView.Stretch)  # ✅ FILL REMAINING SPACE
+        header.setSectionResizeMode(3, QHeaderView.Fixed)    # Status
+        header.setSectionResizeMode(4, QHeaderView.Fixed)    # Activate
+        header.setSectionResizeMode(5, QHeaderView.Fixed)    # Edit
+        header.setSectionResizeMode(6, QHeaderView.Fixed)    # Delete
 
-        self.table.setColumnWidth(1, 90)
-        self.table.setColumnWidth(3, 90)
+        # -------- Column widths --------
+        self.table.setColumnWidth(0, 160)   # Model Name (10 chars)
+        self.table.setColumnWidth(1, 160)    # Type
+        self.table.setColumnWidth(3, 160)   # Status
+
+        self.table.setColumnWidth(4, 140)   # Activate
+        self.table.setColumnWidth(5, 140)   # Edit
+        self.table.setColumnWidth(6, 140)   # Delete
+
+        # -------- Row height --------
+        self.table.verticalHeader().setDefaultSectionSize(56)
+
+        # -------- Text handling --------
+        self.table.setWordWrap(False)
+        self.table.setTextElideMode(Qt.ElideRight)
 
         root.addWidget(self.table, stretch=1)
+
+        self.setLayout(root)
+
 
     # ==================================================
     # DATA

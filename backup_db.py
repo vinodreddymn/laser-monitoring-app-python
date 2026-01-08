@@ -12,11 +12,13 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-# Database configuration (matches db.py)
-DB_HOST = "localhost"
-DB_USER = "svr_user"
-DB_PASSWORD = "india123"
-DB_NAME = "pneumatic_qc"
+from config.app_config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+
+# Database configuration (from config)
+# DB_HOST = "localhost"
+# DB_USER = "svr_user"
+# DB_PASSWORD = "india123"
+# DB_NAME = "pneumatic_qc"
 
 # Project root directory
 PROJECT_ROOT = Path(__file__).resolve().parent

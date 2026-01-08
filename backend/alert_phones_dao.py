@@ -17,17 +17,19 @@ def get_phones_by_model_id(model_id: int) -> list:
 
 
 def add_phone(model_id: int, name: str, phone_number: str) -> int:
-    return query(
+    result = query(
         """
         INSERT INTO alert_phones (model_id, name, phone_number)
         VALUES (%s, %s, %s)
         """,
         (model_id, name, phone_number),
     )
+    log.info("Added alert phone for model %s: %s (%s)", model_id, name, phone_number)
+    return result
 
 
 def update_phone(phone_id: int, name: str, phone_number: str) -> int:
-    return query(
+    result = query(
         """
         UPDATE alert_phones
         SET name = %s, phone_number = %s
@@ -35,13 +37,17 @@ def update_phone(phone_id: int, name: str, phone_number: str) -> int:
         """,
         (name, phone_number, phone_id),
     )
+    log.info("Updated alert phone %s: %s (%s)", phone_id, name, phone_number)
+    return result
 
 
 def delete_phone(phone_id: int) -> int:
-    return query(
+    result = query(
         "DELETE FROM alert_phones WHERE id = %s",
         (phone_id,),
     )
+    log.info("Deleted alert phone %s", phone_id)
+    return result
 
 
 # ---------------------------------------------------

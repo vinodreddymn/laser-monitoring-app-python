@@ -29,8 +29,8 @@ class ActivateModelDialog(QDialog):
     ✔ No clipping / padding issues
     """
 
-    WIDTH = 760
-    HEIGHT = 620
+    WIDTH = 900
+    HEIGHT = 700
 
     # --------------------------------------------------
     def __init__(self, parent=None, model: Optional[Dict] = None):

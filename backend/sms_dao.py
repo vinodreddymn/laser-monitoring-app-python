@@ -258,6 +258,7 @@ def mark_sms_sent(sms_id: int):
         """,
         (sms_id,),
     )
+    log.info("SMS %s marked as sent", sms_id)
 
 
 def increment_sms_retry(sms_id: int, error: str) -> int:
@@ -286,4 +287,6 @@ def increment_sms_retry(sms_id: int, error: str) -> int:
         fetch_one=True,
     )
 
-    return int(row["retry_count"]) if row else 0
+    retry_count = int(row["retry_count"]) if row else 0
+    log.warning("SMS %s retry incremented to %s: %s", sms_id, retry_count, error)
+    return retry_count

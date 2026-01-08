@@ -2,7 +2,7 @@ import serial
 import time
 import threading
 from PySide6.QtCore import QObject, Signal
-from config.serial_ports import APP_READ_PORT, LASER_BAUD
+from config.app_config import APP_READ_PORT, LASER_BAUD
 import logging
 
 log = logging.getLogger(__name__)

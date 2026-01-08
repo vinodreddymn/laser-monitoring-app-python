@@ -17,7 +17,8 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QDialog,
     QDialogButtonBox,
-    QFrame
+    QFrame,
+     QSizePolicy
 )
 from PySide6.QtCore import Qt
 
@@ -45,8 +46,8 @@ class PhoneEditDialog(QDialog):
     • Fixed-size, distraction-free
     """
 
-    WIDTH = 420
-    HEIGHT = 260
+    WIDTH = 500
+    HEIGHT = 300
 
     # --------------------------------------------------
     def __init__(self, parent=None, contact: Optional[Dict] = None):
@@ -209,6 +210,7 @@ class AlertPhonesTab(QWidget):
         root.addLayout(action_row)
 
         # ---------------- Table ----------------
+        # ---------------- Table ----------------
         self.table = QTableWidget(0, 3)
         self.table.setObjectName("AlertContactsTable")
         self.table.setHorizontalHeaderLabels(
@@ -228,14 +230,19 @@ class AlertPhonesTab(QWidget):
 
         self.table.setColumnWidth(2, 280)
 
+        # ✅ CRITICAL FIXES
+        self.table.setMinimumHeight(420)   # show many rows
+        self.table.setSizePolicy(
+            QSizePolicy.Expanding,
+            QSizePolicy.Expanding
+        )
+
         root.addWidget(self.table)
 
         # ---------------- Status ----------------
         self.status_label = QLabel("Select a model to manage alert contacts")
         self.status_label.setObjectName("MutedText")
         root.addWidget(self.status_label)
-
-        root.addStretch()
 
     # ==================================================
     # DATA

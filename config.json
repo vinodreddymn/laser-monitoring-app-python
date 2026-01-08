@@ -1,0 +1,69 @@
+{
+  "database": {
+    "host": "localhost",
+    "user": "svr_user",
+    "password": "india123",
+    "name": "pneumatic_qc"
+  },
+  "serial_ports": {
+    "simulator_write_port": "COM5",
+    "app_read_port": "COM6",
+    "gsm_simulator_port": "COM2",
+    "gsm_app_port": "COM1",
+    "laser_baud": 9600,
+    "plc_baud": 9600,
+    "gsm_baud": 115200
+  },
+  "peripherals": {
+    "gsm_port": "COM1",
+    "plc_port": "COM6",
+    "printer_name": "PDFCreator"
+  },
+  "qr_settings": {
+    "qr_text_prefix": "G507",
+    "qr_start_counter": 101005,
+    "model_type": "RHD"
+  },
+  "qr_visual": {
+    "qr_fill_color": "#000000",
+    "text_color": "#000000"
+  },
+  "purge_settings": {
+    "sms_sent_retention_hours": 6,
+    "qr_retention_hours": 6,
+    "cycles_retention_hours": 6
+  },
+  "app_settings": {
+    "settings_password": "admin123",
+    "log_level": "INFO",
+    "window_width": 1920,
+    "window_height": 1000,
+    "primary_color": "#1d4ed8",
+    "success_color": "#10b981",
+    "error_color": "#ef4444",
+    "warning_color": "#f59e0b",
+    "serial_timeout": 1.0,
+    "serial_write_timeout": 1.0,
+    "gsm_heartbeat_interval": 5.0,
+    "gsm_reconnect_delay": 3.0,
+    "printer_check_interval": 5.0,
+    "plc_poll_interval": 1000,
+    "sms_poll_interval": 20,
+    "purge_interval": 3600,
+    "max_sms_queue_size": 200,
+    "max_cycle_history": 100,
+    "default_qr_prefix": "G510",
+    "default_qr_start_counter": 100000,
+    "default_model_type": "LHD",
+    "default_sms_retention_hours": 6,
+    "default_qr_retention_hours": 6,
+    "default_gsm_port": "COM11",
+    "default_plc_port": "COM6",
+    "default_printer_name": "PDFCreator",
+    "enable_sms": true,
+    "enable_printer": true,
+    "enable_gsm": true,
+    "enable_simulator": true,
+    "simulator_port": "COM5"
+  }
+}

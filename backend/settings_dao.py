@@ -7,7 +7,7 @@ import logging
 log = logging.getLogger(__name__)
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-SETTINGS_FILE = os.path.join(BASE_DIR, "settings.json")
+SETTINGS_FILE = os.path.join(BASE_DIR, "config.json")
 
 
 def get_settings() -> dict:
@@ -15,14 +15,26 @@ def get_settings() -> dict:
         return {}
     try:
         with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            config = json.load(f)
+            return config.get("qr_settings", {})
     except Exception:
         return {}
 
 
 def save_settings(settings: dict):
+    # Load full config
+    if os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    else:
+        config = {}
+
+    # Update qr_settings
+    config["qr_settings"] = settings
+
     with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-        json.dump(settings, f, indent=2)
+        json.dump(config, f, indent=2)
+    log.info("Saved QR settings: %s", settings)
 
 
 # ---------------------------------------------------

@@ -1,16 +1,20 @@
-# backend/db.py  ← NEW VERSION (copy-paste this)
+# backend/db.py  ← UPDATED VERSION (uses config)
 import mysql.connector
 from mysql.connector import pooling
 import logging
+
+from config.app_config import DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+
+log = logging.getLogger(__name__)
 
 # Force old collation that EVERY connector supports
 pool = pooling.MySQLConnectionPool(
     pool_name="pqc_pool",
     pool_size=5,
-    host="localhost",
-    user="svr_user",
-    password="india123",
-    database="pneumatic_qc",
+    host=DB_HOST,
+    user=DB_USER,
+    password=DB_PASSWORD,
+    database=DB_NAME,
     autocommit=True,
     charset='utf8mb4',
     collation='utf8mb4_general_ci',   # ← This one is 100% supported everywhere
@@ -26,12 +30,15 @@ def query(sql: str, params=None, fetch_one=False):
         
         if sql.strip().upper().startswith(("INSERT", "UPDATE", "DELETE", "REPLACE")):
             conn.commit()
-            return cursor.lastrowid or cursor.rowcount
+            result = cursor.lastrowid or cursor.rowcount
+            log.debug("DB write: %s -> %s", sql.replace('\n', ' ').strip(), result)
+            return result
         else:
             result = cursor.fetchone() if fetch_one else cursor.fetchall()
+            log.debug("DB read: %s -> %d rows", sql.replace('\n', ' ').strip(), len(result) if isinstance(result, list) else (1 if result else 0))
             return result
     except Exception as e:
-        logging.error(f"DB Error: {e}")
+        log.error("DB Error: %s", e)
         if conn:
             conn.rollback()
         return None if fetch_one else []

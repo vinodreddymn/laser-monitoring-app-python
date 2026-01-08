@@ -40,9 +40,17 @@ log = logging.getLogger(__name__)
 # ======================================================
 BASE_DIR = Path(__file__).resolve().parent.parent
 QR_FOLDER = BASE_DIR / "qr_images"
-VISUAL_SETTINGS_FILE = BASE_DIR / "backend" / "qr_generator.json"
 
-BASE_DIR = Path(__file__).resolve().parents[1]
+# Load visual settings from config.json
+import json
+VISUAL_SETTINGS_FILE = BASE_DIR / "config.json"
+if VISUAL_SETTINGS_FILE.exists():
+    with open(VISUAL_SETTINGS_FILE, "r") as f:
+        config = json.load(f)
+        VISUAL_SETTINGS = config.get("qr_visual", {})
+else:
+    VISUAL_SETTINGS = {}
+
 FONTS_DIR = BASE_DIR / "fonts"
 
 FONT_BOLD = FONTS_DIR / "Roboto-Bold.ttf"
@@ -148,7 +156,7 @@ def generate_and_save_qr_code(
     timestamp = normalize_timestamp(timestamp)
 
 
-    visual = json.load(open(VISUAL_SETTINGS_FILE, "r", encoding="utf-8"))
+    visual = VISUAL_SETTINGS
 
     qr_text = get_next_qr_text()      # ID ONLY
     model_type = get_model_type()

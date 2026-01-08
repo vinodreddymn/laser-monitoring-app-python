@@ -7,6 +7,33 @@ QWidget {
     color: #0c1322ff;
 }
 
+/* QMessageBox dark theme */
+QMessageBox {
+    background-color: #0f1622;
+    color: #e5e7eb;
+    border: 1px solid #1a3a5a;
+}
+
+QMessageBox QLabel {
+    color: #e5e7eb;
+}
+
+QMessageBox QPushButton {
+    background-color: #1e293b;
+    color: #e5e7eb;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    padding: 5px 10px;
+}
+
+QMessageBox QPushButton:hover {
+    background-color: #334155;
+}
+
+QMessageBox QPushButton:pressed {
+    background-color: #0f172a;
+}
+
 /* Optional: focus cleanup */
 *:focus {
     outline: none;
