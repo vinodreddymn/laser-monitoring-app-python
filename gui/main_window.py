@@ -107,7 +107,7 @@ class MainWindow(QWidget):
     - Deterministic layout
     """
 
-    KIOSK_MODE = True  # Set to True for kiosk mode
+    KIOSK_MODE = False  # Set to True for kiosk mode
 
     def __init__(self, signals):
         super().__init__()

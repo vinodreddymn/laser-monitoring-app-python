@@ -152,10 +152,13 @@ def get_pending_qr_cycles(limit: int = 100) -> list:
             c.peak_height,
             c.pass_fail,
             c.qr_code,
-            q.filename AS qr_image_path
+            q.filename AS qr_image_path,
+            m.model_type
         FROM cycles c
         JOIN qr_codes q
           ON q.qr_data = c.qr_code
+        LEFT JOIN models m
+          ON m.id = c.model_id
         WHERE c.qr_code IS NOT NULL
           AND c.printed = 0
         ORDER BY c.timestamp ASC

@@ -167,7 +167,7 @@ class CyclesPanel(QFrame):
 
         layout = QHBoxLayout(card)
         layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(14)
+        layout.setSpacing(20)
 
         # ----- LEFT -----
         left = QVBoxLayout()
@@ -194,7 +194,7 @@ class CyclesPanel(QFrame):
         # ----- RIGHT -----
         right_label = QLabel()
         right_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        right_label.setFont(QFont("Consolas", 20 if is_pass else 12, QFont.Bold if is_pass else QFont.Normal))
+        right_label.setFont(QFont("Consolas", 28 if is_pass else 16, QFont.Bold if is_pass else QFont.Normal))
         
         if is_pass:
             qr_value = (
