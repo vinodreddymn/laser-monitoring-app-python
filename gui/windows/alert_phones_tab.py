@@ -33,6 +33,10 @@ from gui.styles.app_styles import apply_base_dialog_style
 
 log = logging.getLogger(__name__)
 
+MAX_NAME_LENGTH = 45
+PHONE_DIGITS = 10
+COUNTRY_CODE = "+91"
+
 
 # =====================================================
 # Alert Contact Add / Edit Dialog
@@ -86,10 +90,21 @@ class PhoneEditDialog(QDialog):
 
         self.name_input.setPlaceholderText("Person name")
         self.phone_input.setPlaceholderText("+919876543210")
+        self.name_input.setMaxLength(MAX_NAME_LENGTH)
+        self.phone_input.setMaxLength(PHONE_DIGITS)
+        self.phone_input.setPlaceholderText("10 digit mobile number")
 
         if self.contact:
             self.name_input.setText(self.contact.get("name", ""))
-            self.phone_input.setText(self.contact.get("phone_number", ""))
+
+            # Show only last 10 digits in edit mode
+            phone = self.contact.get("phone_number", "")
+            phone_digits = re.sub(r"\D", "", phone)
+
+            if phone_digits.endswith(phone_digits[-PHONE_DIGITS:]):
+                phone_digits = phone_digits[-PHONE_DIGITS:]
+
+            self.phone_input.setText(phone_digits)
 
         form.addRow("Name", self.name_input)
         form.addRow("Phone Number", self.phone_input)
@@ -122,17 +137,33 @@ class PhoneEditDialog(QDialog):
         name = self.name_input.text().strip()
         phone = self.phone_input.text().strip()
 
-        phone = re.sub(r"[^0-9+]", "", phone)
-        if phone and not phone.startswith("+"):
-            phone = "+" + phone
-
+        # ---------------- Name Validation ----------------
         if not name:
             return None, None, "Name is required."
 
-        if not phone or not re.match(r"^\+\d{8,15}$", phone):
-            return None, None, "Phone number must be in international format."
+        if len(name) > MAX_NAME_LENGTH:
+            return (
+                None,
+                None,
+                f"Name must be less than {MAX_NAME_LENGTH} characters."
+            )
 
-        return name, phone, None
+        # ---------------- Phone Validation ----------------
+        # Remove anything except digits
+        phone_digits = re.sub(r"\D", "", phone)
+
+        if len(phone_digits) != PHONE_DIGITS:
+            return (
+                None,
+                None,
+                "Phone number must contain exactly 10 digits."
+            )
+
+        # Always store in +91 format
+        phone_final = f"{COUNTRY_CODE}{phone_digits}"
+
+        return name, phone_final, None
+
 
 
 # =====================================================
