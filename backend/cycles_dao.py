@@ -2,31 +2,35 @@
 # backend/cycles_dao.py
 # Pneumatic Laser QC System
 #
+# SINGLE SOURCE OF TRUTH – CYCLES DATA ACCESS
+#
 # Responsibilities:
-# - Persist detected cycles
-# - Maintain active model cache (via watchdog)
-# - Provide recent cycles for dashboards
-# - Provide pending QR cycles for manual printing
-# - Safely mark cycles as printed
-# - Log all print / reprint events (audit trail)
+# - Persist detected cycles (live)
+# - Maintain active model cache (watchdog-driven)
+# - Serve dashboard / UI queries
+# - Serve pending QR print queue
+# - Support live + archived reprints
+# - Mark printed cycles safely
+# - Maintain full print audit trail
 # ======================================================
 
 from datetime import datetime
 import logging
-from typing import List, Optional
+from typing import List, Optional, Dict
 
-from .db import query
+from backend.db import query
 from backend.model_watchdog import get_cached_model, register_listener
 
 log = logging.getLogger(__name__)
 
 # ======================================================
-# ACTIVE MODEL CACHE (LOCAL, FAST)
+# ACTIVE MODEL CACHE (HOT PATH OPTIMIZATION)
 # ======================================================
 
-ACTIVE_MODEL_CACHE = {
+ACTIVE_MODEL_CACHE: Dict[str, Optional[object]] = {
     "id": None,
     "name": None,
+    "model_type": None,
     "lower_limit": 0.0,
     "upper_limit": 100.0,
 }
@@ -35,41 +39,47 @@ ACTIVE_MODEL_CACHE = {
 # INTERNAL HELPERS
 # ======================================================
 
-def _format_timestamp(iso_string: str) -> str:
+def _format_timestamp(iso_string: Optional[str]) -> str:
     """
-    Convert ISO timestamp to MySQL DATETIME format safely.
-    Falls back to current time if parsing fails.
+    Convert ISO timestamp → MySQL DATETIME safely.
     """
+    if not iso_string:
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     try:
         dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
         return dt.strftime("%Y-%m-%d %H:%M:%S")
     except Exception:
-        log.warning("cycles_dao: invalid timestamp '%s', using now()", iso_string)
+        log.warning("Invalid timestamp '%s', using now()", iso_string)
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _update_local_cache(model: dict):
     """
-    Update the module-local active model cache when watchdog notifies.
-    Avoids DB hits on the hot cycle-detection path.
+    Watchdog callback – keeps cycle logging DB-free.
     """
     if not model:
         return
 
     try:
-        ACTIVE_MODEL_CACHE["id"] = model.get("id")
-        ACTIVE_MODEL_CACHE["name"] = model.get("name")
-        ACTIVE_MODEL_CACHE["lower_limit"] = float(
-            model.get("lower_limit", model.get("lower", 0.0))
-        )
-        ACTIVE_MODEL_CACHE["upper_limit"] = float(
-            model.get("upper_limit", model.get("upper", 100.0))
+        ACTIVE_MODEL_CACHE.update(
+            {
+                "id": model.get("id"),
+                "name": model.get("name"),
+                "model_type": model.get("model_type"),
+                "lower_limit": float(
+                    model.get("lower_limit", model.get("lower", 0.0))
+                ),
+                "upper_limit": float(
+                    model.get("upper_limit", model.get("upper", 100.0))
+                ),
+            }
         )
 
-        log.info("cycles_dao: active model cache updated → %s", ACTIVE_MODEL_CACHE)
+        log.info("Active model cache updated → %s", ACTIVE_MODEL_CACHE)
 
     except Exception:
-        log.exception("cycles_dao: failed to update active model cache")
+        log.exception("Failed to update active model cache")
 
 
 # ======================================================
@@ -83,65 +93,92 @@ try:
 except Exception:
     pass
 
+
 # ======================================================
-# CYCLE PERSISTENCE
+# CYCLE PERSISTENCE (LIVE)
 # ======================================================
 
 def log_cycle(cycle: dict) -> int:
     """
-    Insert a detected cycle into the database.
+    Persist a detected cycle into `cycles`.
 
-    Uses the local active model cache for model_id and model_name
-    to avoid database access on every cycle.
+    REQUIRED FIELDS (from service):
+    - timestamp
+    - peak_height
+    - pass_fail
+    - qr_text (PASS only)
+    - model_type
     """
-    formatted_ts = _format_timestamp(
-        cycle.get("timestamp", datetime.now().isoformat())
-    )
+
+    formatted_ts = _format_timestamp(cycle.get("timestamp"))
 
     model_id = ACTIVE_MODEL_CACHE.get("id", cycle.get("model_id"))
     model_name = (
         ACTIVE_MODEL_CACHE.get("name")
         or cycle.get("model_name")
-        or "Unknown"
+        or "UNKNOWN"
+    )
+    model_type = (
+        ACTIVE_MODEL_CACHE.get("model_type")
+        or cycle.get("model_type")
     )
 
     cycle_id = query(
         """
         INSERT INTO cycles
-            (timestamp, model_id, model_name, peak_height, pass_fail, qr_code)
-        VALUES (%s, %s, %s, %s, %s, %s)
+            (timestamp, model_id, model_name, model_type,
+             peak_height, pass_fail, qr_code)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         """,
         (
             formatted_ts,
             model_id,
             model_name,
+            model_type,
             cycle.get("peak_height"),
             cycle.get("pass_fail"),
             cycle.get("qr_text"),
         ),
     )
-    log.info("Logged cycle %s for model %s: peak=%.2f, pass=%s", cycle_id, model_name, cycle.get("peak_height"), cycle.get("pass_fail"))
+
+    log.info(
+        "Cycle logged | id=%s | model=%s | type=%s | peak=%.2f | result=%s",
+        cycle_id,
+        model_name,
+        model_type,
+        cycle.get("peak_height", 0.0),
+        cycle.get("pass_fail"),
+    )
+
     return cycle_id
 
 
-def get_cycles(limit: int = 50) -> list:
+# ======================================================
+# DASHBOARD / HISTORY
+# ======================================================
+
+def get_cycles(limit: int = 50) -> List[dict]:
     """
-    Return recent cycles for dashboards / history views.
+    Recent cycles for dashboards.
     """
     return query(
-        "SELECT * FROM cycles ORDER BY id DESC LIMIT %s",
+        """
+        SELECT *
+        FROM cycles
+        ORDER BY id DESC
+        LIMIT %s
+        """,
         (limit,),
     )
 
 
 # ======================================================
-# PRINT QUEUE (FIRST-TIME PRINT)
+# PENDING QR PRINT QUEUE (FIRST PRINT)
 # ======================================================
 
-def get_pending_qr_cycles(limit: int = 100) -> list:
+def get_pending_qr_cycles(limit: int = 100) -> List[dict]:
     """
-    Return cycles where QR is generated but not printed yet,
-    joined with qr_codes to fetch image path.
+    Cycles that have QR generated but not yet printed.
     """
     return query(
         """
@@ -149,16 +186,14 @@ def get_pending_qr_cycles(limit: int = 100) -> list:
             c.id,
             c.timestamp,
             c.model_name,
+            c.model_type,
             c.peak_height,
             c.pass_fail,
             c.qr_code,
-            q.filename AS qr_image_path,
-            m.model_type
+            q.filename AS qr_image_path
         FROM cycles c
         JOIN qr_codes q
           ON q.qr_data = c.qr_code
-        LEFT JOIN models m
-          ON m.id = c.model_id
         WHERE c.qr_code IS NOT NULL
           AND c.printed = 0
         ORDER BY c.timestamp ASC
@@ -168,11 +203,87 @@ def get_pending_qr_cycles(limit: int = 100) -> list:
     )
 
 
+# ======================================================
+# SEARCH BY QR (LIVE + ARCHIVE)
+# ======================================================
+
+def get_cycle_by_qr_code(qr_code: str) -> Optional[dict]:
+    """
+    Fetch cycle by QR code.
+    Search order:
+      1. cycles
+      2. cycles_archive
+    """
+
+    # ---------- LIVE ----------
+    rows = query(
+        """
+        SELECT
+            c.id            AS cycle_id,
+            c.timestamp,
+            c.model_id,
+            c.model_name,
+            c.model_type,
+            c.peak_height,
+            c.pass_fail,
+            c.qr_code,
+            c.printed,
+            q.filename      AS qr_image_path
+        FROM cycles c
+        LEFT JOIN qr_codes q
+            ON q.qr_data = c.qr_code
+        WHERE c.qr_code = %s
+        ORDER BY c.timestamp DESC
+        LIMIT 1
+        """,
+        (qr_code,),
+    )
+
+    if rows:
+        row = rows[0]
+        row["source"] = "live"
+        return row
+
+    # ---------- ARCHIVE ----------
+    rows = query(
+        """
+        SELECT
+            ca.id           AS cycle_id,
+            ca.timestamp,
+            ca.model_id,
+            ca.model_name,
+            ca.model_type,
+            ca.peak_height,
+            ca.pass_fail,
+            ca.qr_code,
+            ca.printed,
+            qa.filename     AS qr_image_path
+        FROM cycles_archive ca
+        LEFT JOIN qr_codes_archive qa
+            ON qa.qr_data = ca.qr_code
+        WHERE ca.qr_code = %s
+        ORDER BY ca.timestamp DESC
+        LIMIT 1
+        """,
+        (qr_code,),
+    )
+
+    if rows:
+        row = rows[0]
+        row["source"] = "archive"
+        return row
+
+    return None
+
+
+# ======================================================
+# PRINT STATE MANAGEMENT
+# ======================================================
 
 def mark_printed(cycle_id: int) -> int:
     """
-    Mark a cycle as printed (first successful print).
-    Idempotent and safe against double-clicks.
+    Mark cycle as printed.
+    Safe + idempotent.
     """
     return query(
         """
@@ -187,8 +298,7 @@ def mark_printed(cycle_id: int) -> int:
 
 def mark_printed_bulk(cycle_ids: List[int]) -> int:
     """
-    Mark multiple cycles as printed in one operation.
-    Useful for 'Print All Pending' workflows.
+    Bulk mark cycles as printed.
     """
     if not cycle_ids:
         return 0
@@ -205,8 +315,9 @@ def mark_printed_bulk(cycle_ids: List[int]) -> int:
         tuple(cycle_ids),
     )
 
+
 # ======================================================
-# PRINT AUDIT LOG (AUTO / MANUAL / REPRINT)
+# PRINT AUDIT TRAIL
 # ======================================================
 
 def log_print_event(
@@ -216,8 +327,7 @@ def log_print_event(
     reason: Optional[str] = None,
 ) -> int:
     """
-    Log a print event into cycle_print_log.
-    print_type: AUTO | MANUAL | REPRINT
+    Log AUTO / MANUAL / REPRINT event.
     """
     return query(
         """
@@ -229,9 +339,9 @@ def log_print_event(
     )
 
 
-def get_print_history(cycle_id: int) -> list:
+def get_print_history(cycle_id: int) -> List[dict]:
     """
-    Return complete print / reprint history for a cycle.
+    Full print history for audit UI.
     """
     return query(
         """
@@ -249,20 +359,23 @@ def get_print_history(cycle_id: int) -> list:
 
 
 # ======================================================
-# REPRINT SUPPORT (DOES NOT CHANGE printed FLAG)
+# REPRINT SUPPORT (NO STATE CHANGE)
 # ======================================================
 
 def get_cycle_for_reprint(cycle_id: int) -> Optional[dict]:
     """
-    Fetch QR data for reprinting an already printed cycle.
+    Fetch QR data for reprinting by cycle ID.
     """
     rows = query(
         """
-        SELECT id, qr_code
+        SELECT
+            id,
+            qr_code
         FROM cycles
         WHERE id = %s
           AND qr_code IS NOT NULL
         """,
         (cycle_id,),
     )
+
     return rows[0] if rows else None

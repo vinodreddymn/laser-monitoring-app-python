@@ -12,9 +12,11 @@
 # - Queue SMS alerts (FAIL)
 # ======================================================
 
+from itertools import cycle
 import logging
 
-from backend.qr_generator import generate_and_save_qr_code
+from backend.qr_generator import generate_new_qr
+
 from backend.cycles_dao import (
     log_cycle,
     mark_printed,
@@ -55,27 +57,27 @@ def handle_detected_cycle(cycle: dict, signals):
     # --------------------------------------------------
     if status == "PASS":
         try:
-            qr = generate_and_save_qr_code(
+            qr = generate_new_qr(
                 model_name=cycle.get("model_name", "UNKNOWN"),
                 peak_value=cycle.get("peak_height", 0.0),
                 timestamp=cycle.get("timestamp"),
             )
 
-            qr_text = qr.get("text")
-            qr_image_path = qr.get("absolutePath")
-            qr_code_id = qr_text  # QR text used as unique ID
+            qr_text = qr["qr_text"]
+            qr_image_path = qr["absolutePath"]
+            qr_code_id = qr_text
 
+            # 🔒 Persisted, deterministic fields
             cycle["qr_text"] = qr_text
-            cycle["qr_code_id"] = qr_code_id
+            cycle["qr_code"] = qr_text
             cycle["qr_image_path"] = qr_image_path
+            cycle["model_type"] = qr["model_type"]
 
             log.info(
-                "QR generated",
-                extra={
-                    "qr_text": qr_text,
-                    "model": cycle.get("model_name"),
-                    "peak": cycle.get("peak_height"),
-                },
+                "QR generated | %s | model=%s | type=%s",
+                qr_text,
+                cycle.get("model_name"),
+                cycle["model_type"],
             )
 
         except Exception:
@@ -113,13 +115,18 @@ def handle_detected_cycle(cycle: dict, signals):
         ok, err = try_print_live_cycle(
             {
                 "id": cycle_id,
+                "timestamp": cycle.get("timestamp"),
                 "qr_code": qr_text,
-                "qr_code_id": qr_code_id,
+                "qr_code_id": qr_text,
                 "qr_image_path": qr_image_path,
                 "model_name": cycle.get("model_name", "UNKNOWN"),
+                "model_type": cycle.get("model_type", "RHD"),
+                "peak_height": cycle.get("peak_height", 0.0),
                 "pass_fail": status,
             }
         )
+
+
 
         if ok:
             try:

@@ -1,7 +1,7 @@
 import logging
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout,
+    QWidget, QDialog, QVBoxLayout, QHBoxLayout,
     QTableWidget, QTableWidgetItem,
     QPushButton, QMessageBox, QLabel,
     QHeaderView, QFrame
@@ -20,7 +20,7 @@ from gui.styles.app_styles import apply_base_dialog_style
 log = logging.getLogger(__name__)
 
 
-class PendingQRPrintWindow(QDialog):
+class PendingQRPrintTab(QWidget):
     """
     Industrial-grade Pending QR Print Window
 
@@ -40,9 +40,7 @@ class PendingQRPrintWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.setWindowTitle("Pending QR Label Printing")
-        self.setModal(True)
-        self.setMinimumSize(self.WIDTH, self.HEIGHT)
+        
 
         base_font = self.font()
         base_font.setPointSize(11)
@@ -187,7 +185,8 @@ class PendingQRPrintWindow(QDialog):
 
         close_btn = QPushButton("Close")
         close_btn.setMinimumHeight(36)
-        close_btn.clicked.connect(self.accept)
+        close_btn.clicked.connect(self._close_parent_dialog)
+
 
         layout.addWidget(self.select_all_btn)
         layout.addStretch()
@@ -282,6 +281,11 @@ class PendingQRPrintWindow(QDialog):
             QTimer.singleShot(0, self._show_empty_message)
         else:
             self.empty_lbl.hide()
+
+    def _close_parent_dialog(self):
+        dlg = self.window()
+        if dlg:
+            dlg.close()
 
 
     def _show_empty_message(self):

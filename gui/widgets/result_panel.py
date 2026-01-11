@@ -121,7 +121,6 @@ class ResultPanel(QFrame):
             self.status_lbl.setText("PASS")
             self.status_lbl.setStyleSheet("""
                 color: #00ffaa;
-                text-shadow: 0 0 20px #00ffaa66;
             """)
             border_color = "#00ffaa"
             glow = "0 0 30px #00ffaa44"
@@ -147,7 +146,6 @@ class ResultPanel(QFrame):
             border-radius: 12px;
             color: {qr_color};
             padding: 40px;
-            box-shadow: {glow};
         """)
 
         # === Details text ===
@@ -179,7 +177,6 @@ class ResultPanel(QFrame):
             border-radius: 12px;
             color: #666;
             padding: 40px;
-            box-shadow: 0 0 24px #ff444455;
         """)
 
         self.details_lbl.setText("")

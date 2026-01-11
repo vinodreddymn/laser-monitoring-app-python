@@ -15,7 +15,7 @@ from config.app_config import WINDOW_TITLE
 
 from gui.windows.settings_window import SettingsWindow
 from gui.windows.password_modal import PasswordModal
-from gui.windows.pending_qr_print_window import PendingQRPrintWindow
+from gui.windows.qr_print_dialog import QRPrintDialog
 from gui.widgets.plot_panel import PlotPanel
 from gui.widgets.result_panel import ResultPanel
 from gui.widgets.cycles_panel import CyclesPanel
@@ -233,12 +233,8 @@ class MainWindow(QWidget):
 # PENDING QR PRINT WINDOW
 # ============================================================
     def open_pending_qr_window(self):
-        if not hasattr(self, "_pending_qr_window"):
-            self._pending_qr_window = PendingQRPrintWindow(self)
-
-        self._pending_qr_window.show()
-        self._pending_qr_window.raise_()
-        self._pending_qr_window.activateWindow()
+        dlg = QRPrintDialog(self)
+        dlg.exec()
 
 
     # ============================================================

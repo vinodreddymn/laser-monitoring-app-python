@@ -21,7 +21,7 @@
   },
   "qr_settings": {
     "qr_text_prefix": "G507",
-    "qr_start_counter": 101171,
+    "qr_start_counter": 101255,
     "model_type": "RHD"
   },
   "qr_visual": {
@@ -29,9 +29,9 @@
     "text_color": "#000000"
   },
   "purge_settings": {
-    "sms_sent_retention_hours": 6,
-    "qr_retention_hours": 6,
-    "cycles_retention_hours": 6
+    "sms_sent_retention_hours": 1,
+    "qr_retention_hours": 1,
+    "cycles_retention_hours": 1
   },
   "app_settings": {
     "settings_password": "admin123",
