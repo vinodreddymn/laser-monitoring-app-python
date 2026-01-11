@@ -20,9 +20,9 @@
     "printer_name": "PDFCreator"
   },
   "qr_settings": {
-    "qr_text_prefix": "G507",
-    "qr_start_counter": 101255,
-    "model_type": "RHD"
+    "qr_text_prefix": "G510",
+    "qr_start_counter": 101323,
+    "model_type": "LHD"
   },
   "qr_visual": {
     "qr_fill_color": "#000000",

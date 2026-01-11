@@ -1,6 +1,9 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QDialog, QMessageBox, QLabel, QPushButton
+    QWidget, QVBoxLayout, QHBoxLayout, QDialog,
+    QLabel, QPushButton, QApplication
 )
+from PySide6.QtCore import QEvent
+
 from PySide6.QtCore import Qt, QTimer, QDateTime, Slot
 from PySide6.QtGui import QFont
 
@@ -9,7 +12,6 @@ from backend.cycles_dao import get_cycles
 from backend.sms_sender import sms_signals
 from backend.gsm_modem import modem_signals
 from backend.usb_printer_manager import printer_signals
-
 
 from config.app_config import WINDOW_TITLE
 
@@ -24,19 +26,10 @@ from gui.widgets.header_widget import HeaderWidget
 from gui.styles.app_styles import apply_base_dialog_style
 
 
-
 # ============================================================
 # SHUTDOWN CONFIRMATION DIALOG
 # ============================================================
 class ShutdownConfirmDialog(QDialog):
-    """
-    Shutdown Confirmation Dialog – Industrial HMI Uniform
-
-    • Consistent with other dialogs
-    • Clear warning text
-    • Factory-safe styling
-    """
-
     WIDTH = 700
     HEIGHT = 420
 
@@ -51,7 +44,6 @@ class ShutdownConfirmDialog(QDialog):
         self._build_ui()
         apply_base_dialog_style(self)
 
-        # Override fonts for larger text
         self.title.setStyleSheet("font-size: 28pt; font-weight: bold; color: #f8fafc;")
         self.warning.setStyleSheet("font-size: 18pt; color: #94a3b8;")
 
@@ -60,28 +52,21 @@ class ShutdownConfirmDialog(QDialog):
         root.setContentsMargins(28, 28, 28, 28)
         root.setSpacing(22)
 
-        # ---------------- Title ----------------
         self.title = QLabel("Exit Pneumatic Laser QC System?")
-        self.title.setObjectName("DialogTitle")
         self.title.setAlignment(Qt.AlignCenter)
         root.addWidget(self.title)
 
-        # ---------------- Warning Text ----------------
         self.warning = QLabel(
             "This will safely stop all system services and power down the application.\n\n"
             "Ensure no active welding cycle is in progress."
         )
-        self.warning.setObjectName("MutedText")
         self.warning.setAlignment(Qt.AlignCenter)
         self.warning.setWordWrap(True)
         root.addWidget(self.warning)
 
         root.addStretch()
 
-        # ---------------- Buttons ----------------
-        button_row = QHBoxLayout()
-        button_row.setSpacing(12)
-
+        buttons = QHBoxLayout()
         self.cancel_btn = QPushButton("Cancel")
         self.cancel_btn.setProperty("role", "secondary")
         self.cancel_btn.clicked.connect(self.reject)
@@ -90,24 +75,17 @@ class ShutdownConfirmDialog(QDialog):
         self.shutdown_btn.setProperty("role", "danger")
         self.shutdown_btn.clicked.connect(self.accept)
 
-        button_row.addStretch()
-        button_row.addWidget(self.cancel_btn)
-        button_row.addWidget(self.shutdown_btn)
+        buttons.addStretch()
+        buttons.addWidget(self.cancel_btn)
+        buttons.addWidget(self.shutdown_btn)
+        root.addLayout(buttons)
 
-        root.addLayout(button_row)
 
-
+# ============================================================
+# MAIN WINDOW
+# ============================================================
 class MainWindow(QWidget):
-    """
-    Main Application Window – Production / Kiosk Ready
-
-    - Fullscreen kiosk support
-    - Secure shutdown
-    - Zero wasted space
-    - Deterministic layout
-    """
-
-    KIOSK_MODE = False  # Set to True for kiosk mode
+    KIOSK_MODE = True
 
     def __init__(self, signals):
         super().__init__()
@@ -119,6 +97,7 @@ class MainWindow(QWidget):
         self._build_ui()
         self._connect_signals()
         self._init_timers()
+        self._init_cursor_hiding()
 
         if self.KIOSK_MODE:
             self.setWindowFlags(
@@ -140,37 +119,29 @@ class MainWindow(QWidget):
         root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(6)
 
-        # ---------------- HEADER ----------------
         self.header = HeaderWidget(
             on_print_clicked=self.open_pending_qr_window,
             on_settings_clicked=self.open_settings,
             on_shutdown_clicked=self.request_shutdown,
             kiosk_mode=self.KIOSK_MODE
         )
-
         root.addWidget(self.header)
 
-        # ---------------- MAIN CONTENT ----------------
         content = QHBoxLayout()
-        content.setSpacing(6)
-
         left = QVBoxLayout()
-        left.setSpacing(6)
 
         self.plot_panel = PlotPanel()
         self.result_panel = ResultPanel()
+        self.cycles_panel = CyclesPanel(kiosk_mode=self.KIOSK_MODE)
 
         left.addWidget(self.plot_panel, stretch=7)
         left.addWidget(self.result_panel, stretch=3)
-
-        self.cycles_panel = CyclesPanel(kiosk_mode=self.KIOSK_MODE)
 
         content.addLayout(left, stretch=4)
         content.addWidget(self.cycles_panel, stretch=1)
 
         root.addLayout(content, stretch=1)
 
-        # ---------------- FOOTER ----------------
         self.footer = FooterWidget()
         root.addWidget(self.footer)
 
@@ -204,41 +175,69 @@ class MainWindow(QWidget):
         )
 
     # ============================================================
-    # SETTINGS
+    # CURSOR AUTO-HIDE (KIOSK SAFE)
     # ============================================================
-    def open_settings(self):
-        pwd = PasswordModal(self)
-        if pwd.exec() != QDialog.Accepted:
+    def _init_cursor_hiding(self):
+        if not self.KIOSK_MODE:
             return
 
+        self.cursor_hidden = False
+
+        self.cursor_timer = QTimer(self)
+        self.cursor_timer.setInterval(3000)  # 3 seconds
+        self.cursor_timer.setSingleShot(True)
+        self.cursor_timer.timeout.connect(self._hide_cursor)
+
+        QApplication.instance().installEventFilter(self)
+        self.cursor_timer.start()
+
+    def _hide_cursor(self):
+        if self.isActiveWindow() and not self.cursor_hidden:
+            QApplication.setOverrideCursor(Qt.BlankCursor)
+            self.cursor_hidden = True
+
+    def _show_cursor(self):
+        if self.cursor_hidden:
+            QApplication.restoreOverrideCursor()
+            self.cursor_hidden = False
+
+    def eventFilter(self, obj, event):
+        if self.KIOSK_MODE and self.isActiveWindow():
+            if event.type() in (
+                QEvent.MouseMove,
+                QEvent.MouseButtonPress,
+                QEvent.KeyPress,
+                QEvent.Wheel,
+                QEvent.TouchBegin,
+                QEvent.TouchUpdate,
+            ):
+                self._show_cursor()
+                self.cursor_timer.start()
+
+        return super().eventFilter(obj, event)
+
+
+    # ============================================================
+    # SETTINGS / SHUTDOWN
+    # ============================================================
+    def open_settings(self):
+        if PasswordModal(self).exec() != QDialog.Accepted:
+            return
         dlg = SettingsWindow(self)
         dlg.settings_applied.connect(self.refresh_active_model)
         dlg.exec()
 
-    # ============================================================
-    # SHUTDOWN (ENHANCED, FACTORY SAFE – UNIFORM DIALOG)
-    # ============================================================
     def request_shutdown(self):
-        pwd = PasswordModal(self)
-        if pwd.exec() != QDialog.Accepted:
+        if PasswordModal(self).exec() != QDialog.Accepted:
             return
-
-        dlg = ShutdownConfirmDialog(self)
-        if dlg.exec() == QDialog.Accepted:
+        if ShutdownConfirmDialog(self).exec() == QDialog.Accepted:
             self.close()
 
-
-
-    # ============================================================
-# PENDING QR PRINT WINDOW
-# ============================================================
     def open_pending_qr_window(self):
-        dlg = QRPrintDialog(self)
-        dlg.exec()
-
+        QRPrintDialog(self).exec()
 
     # ============================================================
-    # MODEL
+    # MODEL / CYCLES
     # ============================================================
     def refresh_active_model(self):
         model = get_active_model()
@@ -247,43 +246,28 @@ class MainWindow(QWidget):
             self.plot_panel.reset_cycle_markers()
             return
 
-        # ✅ This call already sets limits internally
         self.plot_panel.set_model_info(
             model["name"],
             model.get("model_type", "N/A"),
             float(model["lower_limit"]),
             float(model["upper_limit"])
         )
-
-        # Clear old cycle overlays
         self.plot_panel.reset_cycle_markers()
 
-
-    # ============================================================
-    # CYCLES
-    # ============================================================
     @Slot(dict)
     def on_cycle_detected(self, cycle: dict):
         if not cycle.get("completed", True):
             return
 
-        # 🔹 NEW: update plot QC overlays (reference, min, depth band)
         self.plot_panel.update_cycle_result(cycle)
-
-        # 🔹 Existing behavior
         self.result_panel.update_result(cycle)
-
         QTimer.singleShot(80, self.refresh_cycles)
 
-        # ============================================================
-    # REFRESH CYCLES LIST
-    # ============================================================
     def refresh_cycles(self):
         try:
             cycles = get_cycles(limit=40)
         except Exception:
             cycles = []
-
         self.cycles_panel.update_cycles(cycles)
 
     # ============================================================

@@ -86,13 +86,24 @@ class QRSearchPrintTab(QWidget):
         """)
         layout.addWidget(self.preview, stretch=1)
 
-        # -------- Print Button --------
+        # -------- Action Buttons --------
+        action_row = QHBoxLayout()
+
+        self.clear_btn = QPushButton("Clear / New Search")
+        self.clear_btn.setEnabled(False)
+        self.clear_btn.clicked.connect(self._reset_for_next_search)
+
         self.print_btn = QPushButton("Print QR Label")
         self.print_btn.setProperty("role", "primary")
         self.print_btn.setEnabled(False)
         self.print_btn.clicked.connect(self._print)
 
-        layout.addWidget(self.print_btn, alignment=Qt.AlignRight)
+        action_row.addWidget(self.clear_btn)
+        action_row.addStretch()
+        action_row.addWidget(self.print_btn)
+
+        layout.addLayout(action_row)
+
 
     # ==================================================
     # SEARCH
@@ -249,6 +260,8 @@ class QRSearchPrintTab(QWidget):
 
 
         self.print_btn.setEnabled(True)
+        self.clear_btn.setEnabled(True)
+
 
         log.info(
             "QR search successful",
@@ -329,14 +342,13 @@ class QRSearchPrintTab(QWidget):
         self.print_btn.setEnabled(False)
 
     def _reset_for_next_search(self):
-        """
-        Clear UI and prepare for next QR search.
-        Called after successful print.
-        """
         self._cycle = None
         self.search_edit.clear()
         self.preview.setText("Enter QR text and search.")
         self.print_btn.setEnabled(False)
+        self.clear_btn.setEnabled(False)
+        self.search_edit.setFocus()
+
 
         # Cursor back to QR input for operator
         self.search_edit.setFocus()
