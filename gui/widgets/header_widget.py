@@ -28,6 +28,7 @@ class HeaderWidget(QFrame):
         self,
         on_print_clicked,
         on_settings_clicked,
+        on_history_clicked,   # ✅ NEW
         on_shutdown_clicked=None,
         kiosk_mode: bool = False,
         parent=None
@@ -36,6 +37,7 @@ class HeaderWidget(QFrame):
 
         self.on_print_clicked = on_print_clicked
         self.on_settings_clicked = on_settings_clicked
+        self.on_history_clicked = on_history_clicked   # ✅ FIX
         self.on_shutdown_clicked = on_shutdown_clicked
         self.kiosk_mode = kiosk_mode
 
@@ -107,6 +109,14 @@ class HeaderWidget(QFrame):
                 background: #020617;
             }
         """
+        history_btn = QPushButton("📜")
+        history_btn.setFixedSize(*self.ICON_BTN_SIZE)
+        history_btn.setFont(QFont("Segoe UI", 16))
+        history_btn.setCursor(Qt.PointingHandCursor)
+        history_btn.setToolTip("Cycle History")
+        history_btn.clicked.connect(self.on_history_clicked)
+        history_btn.setStyleSheet(icon_btn_style)
+
 
         # ---------------- PRINT (ICON ONLY) ----------------
         print_btn = QPushButton("🖨")
@@ -133,6 +143,8 @@ class HeaderWidget(QFrame):
         layout.addWidget(self.datetime_lbl)
         layout.addSpacing(12)
         layout.addWidget(print_btn)
+        layout.addSpacing(6)
+        layout.addWidget(history_btn)   # ✅
         layout.addSpacing(6)
         layout.addWidget(settings_btn)
 

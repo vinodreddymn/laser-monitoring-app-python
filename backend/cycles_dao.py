@@ -379,3 +379,55 @@ def get_cycle_for_reprint(cycle_id: int) -> Optional[dict]:
     )
 
     return rows[0] if rows else None
+
+def get_cycles_by_datetime(from_dt: str, to_dt: str) -> list[dict]:
+    """
+    Fetch cycles history between datetime range.
+    Search order:
+    1. cycles (live)
+    2. cycles_archive (archived)
+    """
+
+    # -------- LIVE TABLE --------
+    live_rows = query(
+        """
+        SELECT
+            timestamp,
+            model_name,
+            model_type,
+            peak_height,
+            pass_fail,
+            qr_code,
+            printed
+        FROM cycles
+        WHERE timestamp BETWEEN %s AND %s
+        """,
+        (from_dt, to_dt)
+    )
+
+    # -------- ARCHIVE TABLE --------
+    archive_rows = query(
+        """
+        SELECT
+            timestamp,
+            model_name,
+            model_type,
+            peak_height,
+            pass_fail,
+            qr_code,
+            printed
+        FROM cycles_archive
+        WHERE timestamp BETWEEN %s AND %s
+        """,
+        (from_dt, to_dt)
+    )
+
+    # -------- MERGE & SORT --------
+    all_rows = (live_rows or []) + (archive_rows or [])
+
+    all_rows.sort(
+        key=lambda r: r["timestamp"] or "",
+        reverse=False
+    )
+
+    return all_rows

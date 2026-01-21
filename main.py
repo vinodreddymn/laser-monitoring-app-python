@@ -14,6 +14,12 @@ Responsibilities:
 
 import sys
 import os
+os.environ["QT_LOGGING_RULES"] = (
+    "qt.qpa.fonts=false\n"
+    "qt.qpa.fonts.warning=false\n"
+    "qt.qss.debug=false\n"
+)
+
 import signal
 import logging
 from pathlib import Path
@@ -21,7 +27,6 @@ from pathlib import Path
 # ------------------------------------------------------
 # Qt: suppress noisy QSS warnings (expected in dummy QSS)
 # ------------------------------------------------------
-os.environ["QT_LOGGING_RULES"] = "qt.qss.debug=false"
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFontDatabase
@@ -129,6 +134,17 @@ def main():
     # Qt Application
     # --------------------------------------------------
     app = QApplication(sys.argv)
+    app_font = app.font()
+    if app_font.pointSize() <= 0:
+        app_font.setPointSize(11)   # or 10 / 12 as you prefer
+        app.setFont(app_font)
+    from PySide6.QtCore import QLoggingCategory
+
+    QLoggingCategory.setFilterRules(
+        "qt.qpa.fonts=false\n"
+        "qt.qpa.fonts.warning=false\n"
+    )
+
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(AUTHOR)
 

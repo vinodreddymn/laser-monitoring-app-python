@@ -85,7 +85,7 @@ class ShutdownConfirmDialog(QDialog):
 # MAIN WINDOW
 # ============================================================
 class MainWindow(QWidget):
-    KIOSK_MODE = True
+    KIOSK_MODE = True  # Set to True to enable kiosk mode
 
     def __init__(self, signals):
         super().__init__()
@@ -122,6 +122,7 @@ class MainWindow(QWidget):
         self.header = HeaderWidget(
             on_print_clicked=self.open_pending_qr_window,
             on_settings_clicked=self.open_settings,
+            on_history_clicked=self.open_history_window,  # ✅
             on_shutdown_clicked=self.request_shutdown,
             kiosk_mode=self.KIOSK_MODE
         )
@@ -278,3 +279,10 @@ class MainWindow(QWidget):
         if status != "CONNECTED":
             self.plot_panel.show_no_data()
             self.result_panel.show_error("NO DATA")
+
+    def open_history_window(self):
+        if PasswordModal(self).exec() != QDialog.Accepted:
+            return
+
+        from gui.windows.history_window import HistoryWindow
+        HistoryWindow(self).exec()

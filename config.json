@@ -17,12 +17,12 @@
   "peripherals": {
     "gsm_port": "COM1",
     "plc_port": "COM6",
-    "printer_name": "PDFCreator"
+    "printer_name": "PDFCreator1"
   },
   "qr_settings": {
-    "qr_text_prefix": "G510",
-    "qr_start_counter": 101323,
-    "model_type": "LHD"
+    "qr_text_prefix": "G507",
+    "qr_start_counter": 100017,
+    "model_type": "RHD"
   },
   "qr_visual": {
     "qr_fill_color": "#000000",
