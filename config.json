@@ -9,19 +9,19 @@
     "simulator_write_port": "COM5",
     "app_read_port": "COM6",
     "gsm_simulator_port": "COM2",
-    "gsm_app_port": "COM1",
+    "gsm_app_port": "COM4",
     "laser_baud": 9600,
     "plc_baud": 9600,
     "gsm_baud": 115200
   },
   "peripherals": {
-    "gsm_port": "COM1",
+    "gsm_port": "COM4",
     "plc_port": "COM6",
-    "printer_name": "PDFCreator1"
+    "printer_name": "TSC TE244"
   },
   "qr_settings": {
     "qr_text_prefix": "G507",
-    "qr_start_counter": 100017,
+    "qr_start_counter": 100110,
     "model_type": "RHD"
   },
   "qr_visual": {

@@ -2,6 +2,6 @@
     "id": 18,
     "name": "G507",
     "model_type": "RHD",
-    "lower_limit": 7.0,
+    "lower_limit": 5.0,
     "upper_limit": 10.0
 }

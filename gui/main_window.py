@@ -85,7 +85,7 @@ class ShutdownConfirmDialog(QDialog):
 # MAIN WINDOW
 # ============================================================
 class MainWindow(QWidget):
-    KIOSK_MODE = True  # Set to True to enable kiosk mode
+    KIOSK_MODE = False  # Set to True to enable kiosk mode
 
     def __init__(self, signals):
         super().__init__()
