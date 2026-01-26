@@ -7,16 +7,16 @@
   },
   "serial_ports": {
     "simulator_write_port": "COM5",
-    "app_read_port": "COM6",
+    "app_read_port": "COM4",
     "gsm_simulator_port": "COM2",
-    "gsm_app_port": "COM4",
+    "gsm_app_port": "COM9",
     "laser_baud": 9600,
     "plc_baud": 9600,
     "gsm_baud": 115200
   },
   "peripherals": {
-    "gsm_port": "COM4",
-    "plc_port": "COM6",
+    "gsm_port": "COM9",
+    "plc_port": "COM4",
     "printer_name": "TSC TE244"
   },
   "qr_settings": {
