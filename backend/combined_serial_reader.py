@@ -1,6 +1,5 @@
 # ============================================================
 # Combined Serial Reader – LASER FROM D0 (Modbus ONLY)
-# FLOAT (REAL) from D0 + D1
 # COMPATIBLE WITH YOUR EXISTING main.py & signals.py
 # ============================================================
 
@@ -8,7 +7,6 @@ import serial
 import time
 import threading
 import logging
-import struct
 
 from PySide6.QtCore import QObject, Signal
 from config.app_config import APP_READ_PORT
@@ -20,9 +18,10 @@ class CombinedSerialReader(QObject):
     # ────────────────────────────────────────────────
     # Signals — EXACTLY matching what main.py expects
     # ────────────────────────────────────────────────
-    laser_value    = Signal(float)        # laser value (FLOAT)
-    plc_status     = Signal(dict)         # {"power": bool, "status": str}
-    status_changed = Signal(str)          # "CONNECTED" / "DISCONNECTED"
+    laser_value = Signal(float)          # scaled laser value → GUI + detector
+    plc_status = Signal(dict)            # {"power": bool, "status": str}
+    status_changed = Signal(str)         # "CONNECTED" / "DISCONNECTED"
+    plc_d0_raw = Signal(int)             # raw D0 value (optional debug)
 
     def __init__(self):
         super().__init__()
@@ -31,17 +30,23 @@ class CombinedSerialReader(QObject):
         self.thread = None
         self.serial = None
 
-        # Modbus config
+        # ───── Modbus config ─────
         self.modbus_slave = '01'
-        self.d0_addr = '1000'              # D0 start address
-        self.poll_interval = 0.5
-        self.watchdog_d0 = 6.0
+        self.d0_addr = '1000'
+        self.poll_interval = 0.5          # seconds
+        self.watchdog_d0 = 6.0             # seconds
+
+        # ───── Processing factors ─────
+        # FINAL VALUE = (raw * multiply_factor) / divide_factor
+        self.multiply_factor = 60.0         # ← CHANGE AS REQUIRED
+        self.divide_factor = 24573.0           # ← CHANGE AS REQUIRED
 
         self.last_valid_d0_time = time.time()
         self.last_poll_time = 0
         self.d0_success_count = 0
         self.d0_fail_count = 0
 
+    # ────────────────────────────────────────────────
     def start(self):
         if self.running:
             return
@@ -49,21 +54,19 @@ class CombinedSerialReader(QObject):
         self.thread = threading.Thread(target=self._worker, daemon=True)
         self.thread.start()
 
+    # ────────────────────────────────────────────────
     def _calculate_lrc(self, data_bytes: bytes) -> str:
         total = sum(data_bytes)
         lrc = (-total) & 0xFF
         return f'{lrc:02X}'.upper()
 
     # ────────────────────────────────────────────────
-    # READ FLOAT (REAL) FROM D0 + D1
-    # ────────────────────────────────────────────────
-    def _poll_d0(self) -> float | None:
+    def _poll_d0(self) -> int | None:
         if not self.serial or not self.serial.is_open:
             return None
 
         try:
-            # Read 2 registers (FLOAT = 32-bit)
-            message = self.modbus_slave + '03' + self.d0_addr + '0002'
+            message = self.modbus_slave + '03' + self.d0_addr + '0001'
             msg_bytes = bytes.fromhex(message)
             lrc = self._calculate_lrc(msg_bytes)
             frame = ':' + message + lrc + '\r\n'
@@ -72,41 +75,41 @@ class CombinedSerialReader(QObject):
             self.serial.write(frame.encode('ascii'))
             self.serial.flush()
 
-            raw = self.serial.read(64)
+            raw = self.serial.read(50)
             if not raw:
                 return None
 
             text = raw.decode('ascii', errors='replace').rstrip('\r\n')
-            if not text.startswith(':'):
-                return None
 
-            content = text[1:]
+            if text.startswith(':') and len(text) >= 11:
+                content = text[1:]
 
-            # Validate response
-            if content[:2] != self.modbus_slave:
-                return None
-            if content[2:4] != '03':
-                return None
-            if content[4:6] != '04':        # 4 data bytes for FLOAT
-                return None
-
-            # Extract words
-            high_word = int(content[6:10], 16)
-            low_word  = int(content[10:14], 16)
-
-            # Big-endian FLOAT (most PLCs, incl. Siemens)
-            raw_32 = (high_word << 16) | low_word
-            value = struct.unpack('>f', raw_32.to_bytes(4, 'big'))[0]
-
-            # Sanity check (optional but recommended)
-            if not (-1e6 < value < 1e6):
-                return None
-
-            return value
+                if (
+                    content[:2] == self.modbus_slave and
+                    content[2:4] == '03' and
+                    content[4:6] == '02'
+                ):
+                    value_hex = content[6:10]
+                    return int(value_hex, 16)
 
         except Exception:
-            return None
+            pass
 
+        return None
+
+    # ────────────────────────────────────────────────
+    def _process_laser_value(self, raw_value: int) -> float:
+        """
+        Apply processing before feeding into GUI.
+        Formula:
+            processed = (raw_value * multiply_factor) / divide_factor
+        """
+        try:
+            return (raw_value * self.multiply_factor) / self.divide_factor
+        except Exception:
+            return 0.0
+
+    # ────────────────────────────────────────────────
     def _worker(self):
         while self.running:
             try:
@@ -140,10 +143,14 @@ class CombinedSerialReader(QObject):
                     now = time.time()
 
                     if now - self.last_poll_time >= self.poll_interval:
-                        value = self._poll_d0()
+                        raw_d0 = self._poll_d0()
 
-                        if value is not None:
-                            self.laser_value.emit(value)
+                        if raw_d0 is not None:
+                            self.plc_d0_raw.emit(raw_d0)
+
+                            processed = self._process_laser_value(raw_d0)
+                            self.laser_value.emit(processed)
+
                             self.last_valid_d0_time = now
                             self.d0_success_count += 1
                             self.d0_fail_count = 0
@@ -162,7 +169,7 @@ class CombinedSerialReader(QObject):
 
                     time.sleep(0.02)
 
-                    # Watchdog
+                    # ───── Watchdog ─────
                     if now - self.last_valid_d0_time > self.watchdog_d0:
                         self.plc_status.emit(
                             {"power": False, "status": "OFFLINE"}
@@ -171,7 +178,8 @@ class CombinedSerialReader(QObject):
 
             except Exception as e:
                 log.exception(
-                    "PLC Modbus error on %s: %s", APP_READ_PORT, e
+                    "PLC Modbus error on %s: %s",
+                    APP_READ_PORT, e
                 )
                 self.status_changed.emit("DISCONNECTED")
                 self.plc_status.emit(
@@ -183,16 +191,18 @@ class CombinedSerialReader(QObject):
         self._safe_close()
         log.info("Combined serial reader stopped")
 
+    # ────────────────────────────────────────────────
     def _safe_close(self):
         if self.serial:
             try:
                 if self.serial.is_open:
                     self.serial.close()
-                log.info("Closed %s", APP_READ_PORT)
+                    log.info("Closed %s", APP_READ_PORT)
             except Exception as e:
                 log.warning("Close error: %s", e)
-            self.serial = None
+        self.serial = None
 
+    # ────────────────────────────────────────────────
     def stop(self):
         log.info("Stopping reader...")
         self.running = False
@@ -201,8 +211,11 @@ class CombinedSerialReader(QObject):
         self._safe_close()
 
 
+# ────────────────────────────────────────────────
 # Singleton — unchanged
+# ────────────────────────────────────────────────
 combined_reader = CombinedSerialReader()
+
 
 def init_combined_reader():
     combined_reader.start()
