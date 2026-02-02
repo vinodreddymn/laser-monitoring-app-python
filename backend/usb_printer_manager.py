@@ -1,6 +1,6 @@
 # ======================================================
 # backend/usb_printer_manager.py
-# USB Label Printer Manager – IMAGE PRINT (GDI SAFE)
+# USB Label Printer Manager – DPI-AWARE IMAGE PRINT
 # ======================================================
 
 import time
@@ -25,14 +25,13 @@ from config.app_config import (
 log = logging.getLogger(__name__)
 
 # ======================================================
-# LABEL CONFIG (MATCH QR GENERATOR)
+# LABEL CONFIG (PHYSICAL SIZE)
 # ======================================================
-QR_IMAGE_DPI = 300          # must match qr_generator.py
-LABEL_WIDTH_IN = 2.28        # change to 3.0 if needed
-LABEL_HEIGHT_IN = 1.46       # change to 3.0 for 2x3 label
 
-LABEL_W_PX = int(LABEL_WIDTH_IN * QR_IMAGE_DPI)
-LABEL_H_PX = int(LABEL_HEIGHT_IN * QR_IMAGE_DPI)
+LABEL_WIDTH_IN = 2.28
+LABEL_HEIGHT_IN = 1.46
+
+BACKGROUND_COLOR = "white"   # label background
 
 # ======================================================
 # SIGNALS
@@ -48,6 +47,14 @@ printer_signals = PrinterSignals()
 # ======================================================
 
 class USBLabelPrinter:
+    """
+    DPI-aware USB label printer (Windows GDI)
+
+    ✔ Exact physical label size
+    ✔ No driver scaling
+    ✔ QR always centered
+    ✔ Works across printers
+    """
 
     def __init__(self):
         self.printer_name: Optional[str] = None
@@ -58,70 +65,11 @@ class USBLabelPrinter:
         self._check_once()
 
     # --------------------------------------------------
-    def emit_current_status(self):
-        printer_signals.printer_status.emit(
-            self.is_connected,
-            self.printer_name or ""
-        )
-
+    # STATUS
     # --------------------------------------------------
-    def print_cycle(self, cycle_data: dict):
-        if not self.is_connected or not self.printer_name:
-            return False, "Printer not connected"
 
-        qr_path = cycle_data.get("qr_image_path")
-        if not qr_path:
-            return False, "QR image path missing"
-
-        qr_path = Path(qr_path)
-        if not qr_path.exists():
-            return False, f"QR image not found: {qr_path}"
-
-        try:
-            self._print_image(qr_path)
-            log.info("🖨 Printed label: %s", qr_path.name)
-            return True, None
-        except Exception as e:
-            log.exception("Print failed")
-            return False, str(e)
-
-    # --------------------------------------------------
-    # IMAGE PRINT (NO SCALING, NO ROTATION)
-    # --------------------------------------------------
-    def _print_image(self, image_path: Path):
-
-        img = Image.open(image_path).convert("RGB")
-
-        # Safety: enforce expected canvas size
-        img = img.resize((LABEL_W_PX, LABEL_H_PX), Image.LANCZOS)
-
-        hPrinter = win32print.OpenPrinter(self.printer_name)
-        try:
-            hdc = win32ui.CreateDC()
-            hdc.CreatePrinterDC(self.printer_name)
-            hdc.SetMapMode(win32con.MM_TEXT)
-
-            hdc.StartDoc(image_path.name)
-            hdc.StartPage()
-
-            dib = ImageWin.Dib(img)
-            dib.draw(
-                hdc.GetHandleOutput(),
-                (0, 0, LABEL_W_PX, LABEL_H_PX)
-            )
-
-            hdc.EndPage()
-            hdc.EndDoc()
-            hdc.DeleteDC()
-
-        finally:
-            win32print.ClosePrinter(hPrinter)
-
-    # --------------------------------------------------
-    # MONITORING
-    # --------------------------------------------------
     def _emit(self, connected: bool, name: str = ""):
-        if self.is_connected == connected:
+        if self.is_connected == connected and self.printer_name == name:
             return
         self.is_connected = connected
         self.printer_name = name if connected else None
@@ -144,6 +92,95 @@ class USBLabelPrinter:
             time.sleep(PRINTER_CHECK_INTERVAL)
 
     # --------------------------------------------------
+    # PUBLIC PRINT API
+    # --------------------------------------------------
+
+    def print_cycle(self, cycle_data: dict):
+        if not self.is_connected or not self.printer_name:
+            return False, "Printer not connected"
+
+        qr_path = cycle_data.get("qr_image_path")
+        if not qr_path:
+            return False, "QR image path missing"
+
+        qr_path = Path(qr_path)
+        if not qr_path.exists():
+            return False, f"QR image not found: {qr_path}"
+
+        try:
+            self._print_image(qr_path)
+            log.info("🖨 Label printed: %s", qr_path.name)
+            return True, None
+        except Exception as e:
+            log.exception("Print failed")
+            return False, str(e)
+
+    # --------------------------------------------------
+    # CORE IMAGE PRINT (DPI SAFE)
+    # --------------------------------------------------
+
+    def _print_image(self, image_path: Path):
+
+        img = Image.open(image_path).convert("RGB")
+
+        hPrinter = win32print.OpenPrinter(self.printer_name)
+        try:
+            hdc = win32ui.CreateDC()
+            hdc.CreatePrinterDC(self.printer_name)
+            hdc.SetMapMode(win32con.MM_TEXT)
+
+            # --------------------------------------------------
+            # 🔑 REAL PRINTER DPI (DO NOT ASSUME 300)
+            # --------------------------------------------------
+            dpi_x = hdc.GetDeviceCaps(win32con.LOGPIXELSX)
+            dpi_y = hdc.GetDeviceCaps(win32con.LOGPIXELSY)
+
+            log.info("Printer DPI detected: %dx%d", dpi_x, dpi_y)
+
+            # --------------------------------------------------
+            # LABEL SIZE IN PRINTER PIXELS
+            # --------------------------------------------------
+            label_w_px = int(LABEL_WIDTH_IN * dpi_x)
+            label_h_px = int(LABEL_HEIGHT_IN * dpi_y)
+
+            # --------------------------------------------------
+            # SCALE IMAGE (NO STRETCH)
+            # --------------------------------------------------
+            img.thumbnail((label_w_px, label_h_px), Image.LANCZOS)
+
+            canvas = Image.new(
+                "RGB",
+                (label_w_px, label_h_px),
+                BACKGROUND_COLOR
+            )
+
+            x = (label_w_px - img.width) // 2
+            y = (label_h_px - img.height) // 2
+            canvas.paste(img, (x, y))
+
+            # --------------------------------------------------
+            # PRINT
+            # --------------------------------------------------
+            hdc.StartDoc(image_path.name)
+            hdc.StartPage()
+
+            dib = ImageWin.Dib(canvas)
+            dib.draw(
+                hdc.GetHandleOutput(),
+                (0, 0, label_w_px, label_h_px)
+            )
+
+            hdc.EndPage()
+            hdc.EndDoc()
+            hdc.DeleteDC()
+
+        finally:
+            win32print.ClosePrinter(hPrinter)
+
+    # --------------------------------------------------
+    # PRINTER DISCOVERY
+    # --------------------------------------------------
+
     def _find_printer(self) -> Optional[str]:
         printers = win32print.EnumPrinters(
             win32print.PRINTER_ENUM_LOCAL |
@@ -175,7 +212,7 @@ class USBLabelPrinter:
 
 
 # ======================================================
-# SINGLETON
+# SINGLETON INSTANCE
 # ======================================================
 
 usb_printer = USBLabelPrinter()
