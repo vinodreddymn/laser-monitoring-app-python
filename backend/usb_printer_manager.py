@@ -28,8 +28,8 @@ log = logging.getLogger(__name__)
 # LABEL CONFIG (MATCH QR GENERATOR)
 # ======================================================
 QR_IMAGE_DPI = 300          # must match qr_generator.py
-LABEL_WIDTH_IN = 2.0        # change to 3.0 if needed
-LABEL_HEIGHT_IN = 1.0       # change to 3.0 for 2x3 label
+LABEL_WIDTH_IN = 2.28        # change to 3.0 if needed
+LABEL_HEIGHT_IN = 1.46       # change to 3.0 for 2x3 label
 
 LABEL_W_PX = int(LABEL_WIDTH_IN * QR_IMAGE_DPI)
 LABEL_H_PX = int(LABEL_HEIGHT_IN * QR_IMAGE_DPI)
