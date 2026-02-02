@@ -210,6 +210,18 @@ class USBLabelPrinter:
         except Exception:
             return False
 
+        # --------------------------------------------------
+    # BACKWARD-COMPAT UI STATUS EMIT
+    # --------------------------------------------------
+    def emit_current_status(self):
+        """
+        Called by FooterWidget on startup.
+        Emits last known printer state.
+        """
+        printer_signals.printer_status.emit(
+            self.is_connected,
+            self.printer_name or ""
+        )
 
 # ======================================================
 # SINGLETON INSTANCE
