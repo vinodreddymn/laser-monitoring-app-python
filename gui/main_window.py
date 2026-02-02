@@ -251,8 +251,10 @@ class MainWindow(QWidget):
             model["name"],
             model.get("model_type", "N/A"),
             float(model["lower_limit"]),
-            float(model["upper_limit"])
+            float(model["upper_limit"]),
+            float(model.get("touch_point", 0.0))
         )
+
         self.plot_panel.reset_cycle_markers()
 
     @Slot(dict)

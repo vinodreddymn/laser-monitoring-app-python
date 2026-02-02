@@ -1,4 +1,3 @@
-# backend/model_watchdog.py
 """
 Active Model Watchdog – Single Source of Truth
 
@@ -90,7 +89,7 @@ def _fetch_active_model_from_db() -> Optional[dict]:
 def _model_signature(model: dict) -> str:
     """
     Stable fingerprint of model data.
-    Only include fields that should trigger updates.
+    Any change here triggers listeners.
     """
     relevant = {
         "id": model.get("id"),
@@ -98,6 +97,7 @@ def _model_signature(model: dict) -> str:
         "model_type": model.get("model_type"),
         "lower_limit": model.get("lower_limit"),
         "upper_limit": model.get("upper_limit"),
+        "touch_point": model.get("touch_point"),  # ✅ INCLUDED
     }
     return json.dumps(relevant, sort_keys=True)
 
@@ -122,7 +122,15 @@ def _update_cache_and_notify(model: dict) -> None:
     except Exception:
         log.exception("⚠ model_watchdog: failed to write JSON")
 
-    log.info("🔁 model_watchdog: active model updated → %s", model)
+    log.info(
+        "🔁 model_watchdog: active model updated → %s",
+        {
+            "id": model.get("id"),
+            "name": model.get("name"),
+            "touch_point": model.get("touch_point"),
+        }
+    )
+
     _notify_listeners(copy.deepcopy(model))
 
 

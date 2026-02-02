@@ -2,21 +2,25 @@
 # Cycle Processing Service (Single Source of Truth)
 # Pneumatic Laser QC System
 #
-# Responsibilities:
-# - Handle detected cycle end-to-end
-# - Generate QR (PASS only)
-# - Emit UI signal
-# - Persist cycle to DB
-# - Perform live auto-print (PASS)
-# - Log AUTO print audit
-# - Queue SMS alerts (FAIL)
+# RESPONSIBILITIES
+# ------------------------------------------------------
+# 1. Normalize detected cycle data
+# 2. Generate QR code (PASS only)
+# 3. Emit UI update (Qt thread-safe)
+# 4. Persist cycle to database
+# 5. Auto-print label (PASS only)
+# 6. Queue SMS alert (FAIL only)
+#
+# IMPORTANT DATA RULE
+# ------------------------------------------------------
+# DB column `peak_height` STORES **WELD DEPTH**
+# (not the raw physical laser peak)
 # ======================================================
 
-from itertools import cycle
 import logging
+from PySide6.QtCore import QTimer
 
 from backend.qr_generator import generate_new_qr
-
 from backend.cycles_dao import (
     log_cycle,
     mark_printed,
@@ -30,141 +34,134 @@ log = logging.getLogger(__name__)
 
 def handle_detected_cycle(cycle: dict, signals):
     """
-    SINGLE authoritative handler for a detected cycle.
+    SINGLE authoritative handler for a detected welding cycle.
 
-    STRICT FLOW ORDER (DO NOT CHANGE):
-    1. Generate QR (PASS only)
-    2. Emit UI signal (cycle_detected)
-    3. Log cycle to DB
-    4. Live AUTO print (PASS only)
-       - mark printed
-       - log AUTO print audit
-    5. Queue SMS alert (FAIL only)
+    EXECUTION ORDER (DO NOT CHANGE):
+    1. Normalize cycle data
+    2. Generate QR (PASS only)
+    3. Emit UI signal (Qt-safe)
+    4. Log cycle to DB
+    5. Auto-print label (PASS only)
+    6. Queue SMS alert (FAIL only)
     """
 
-    # --------------------------------------------------
-    # BASIC DATA
-    # --------------------------------------------------
+    # ==================================================
+    # BASIC DATA EXTRACTION
+    # ==================================================
     status = cycle.get("pass_fail")
     model_id = cycle.get("model_id")
 
+    weld_depth = float(cycle.get("weld_depth", 0.0))
+    touch_point = float(cycle.get("touch_point", 0.0))
+
+    # ==================================================
+    # 🔑 NORMALIZE FOR STORAGE & DOWNSTREAM USE
+    # ==================================================
+    # DB field `peak_height` intentionally stores WELD DEPTH
+    cycle["peak_height"] = weld_depth
+
     qr_text = None
     qr_image_path = None
-    qr_code_id = None
 
-    # --------------------------------------------------
+    # ==================================================
     # QR GENERATION (PASS ONLY)
-    # --------------------------------------------------
+    # ==================================================
     if status == "PASS":
         try:
             qr = generate_new_qr(
                 model_name=cycle.get("model_name", "UNKNOWN"),
-                peak_value=cycle.get("peak_height", 0.0),
+                peak_value=weld_depth,          # weld depth on QR
                 timestamp=cycle.get("timestamp"),
             )
 
             qr_text = qr["qr_text"]
             qr_image_path = qr["absolutePath"]
-            qr_code_id = qr_text
 
-            # 🔒 Persisted, deterministic fields
-            cycle["qr_text"] = qr_text
-            cycle["qr_code"] = qr_text
-            cycle["qr_image_path"] = qr_image_path
-            cycle["model_type"] = qr["model_type"]
+            cycle.update({
+                "qr_text": qr_text,
+                "qr_code": qr_text,
+                "qr_image_path": qr_image_path,
+                "model_type": qr["model_type"],
+            })
 
             log.info(
-                "QR generated | %s | model=%s | type=%s",
+                "QR generated | %s | weld_depth=%.2f mm",
                 qr_text,
-                cycle.get("model_name"),
-                cycle["model_type"],
+                weld_depth,
             )
 
         except Exception:
             log.exception("QR generation failed")
 
-    # --------------------------------------------------
-    # EMIT UI SIGNAL (AFTER QR IS READY)
-    # --------------------------------------------------
-    try:
-        signals.cycle_detected.emit(cycle)
-    except Exception as e:
-        log.error("Failed to emit cycle_detected signal: %s", e)
+    # ==================================================
+    # UI UPDATE (Qt THREAD-SAFE)
+    # ==================================================
+    QTimer.singleShot(
+        0,
+        lambda c=dict(cycle): signals.cycle_detected.emit(c)
+    )
 
-    # --------------------------------------------------
+    # ==================================================
     # LOG CYCLE TO DATABASE
-    # --------------------------------------------------
+    # ==================================================
     try:
         cycle_id = log_cycle(cycle)
         log.info(
-            "Cycle logged",
-            extra={
-                "cycle_id": cycle_id,
-                "result": status,
-                "peak": cycle.get("peak_height"),
-            },
+            "Cycle logged | id=%s | result=%s | weld_depth=%.2f",
+            cycle_id,
+            status,
+            weld_depth,
         )
     except Exception:
         log.exception("Failed to log cycle")
         return None
 
-    # --------------------------------------------------
-    # LIVE AUTO-PRINT (PASS ONLY)
-    # --------------------------------------------------
+    # ==================================================
+    # AUTO-PRINT LABEL (PASS ONLY)
+    # ==================================================
     if status == "PASS" and qr_text and qr_image_path:
-        ok, err = try_print_live_cycle(
-            {
-                "id": cycle_id,
-                "timestamp": cycle.get("timestamp"),
-                "qr_code": qr_text,
-                "qr_code_id": qr_text,
-                "qr_image_path": qr_image_path,
-                "model_name": cycle.get("model_name", "UNKNOWN"),
-                "model_type": cycle.get("model_type", "RHD"),
-                "peak_height": cycle.get("peak_height", 0.0),
-                "pass_fail": status,
-            }
-        )
+        ok, err = try_print_live_cycle({
+            "id": cycle_id,
+            "timestamp": cycle.get("timestamp"),
+            "qr_code": qr_text,
+            "qr_code_id": qr_text,
+            "qr_image_path": qr_image_path,
+            "model_name": cycle.get("model_name", "UNKNOWN"),
+            "model_type": cycle.get("model_type", "RHD"),
 
-
+            # Quality data
+            "peak_height": weld_depth,   # weld depth by definition
+            "touch_point": touch_point,
+            "pass_fail": status,
+        })
 
         if ok:
             try:
-                # 1️⃣ Mark cycle as printed
                 mark_printed(cycle_id)
-
-                # 2️⃣ Log AUTO print audit (CRITICAL)
                 log_print_event(
                     cycle_id=cycle_id,
                     print_type="AUTO",
                     printed_by="SYSTEM",
                     reason=None,
                 )
-
-                log.info("Label printed (AUTO) for cycle %s", cycle_id)
-
-            except Exception as e:
-                log.warning(
-                    "Label printed but DB/audit update failed: %s", e
-                )
+                log.info("Label printed (AUTO) | cycle=%s", cycle_id)
+            except Exception:
+                log.exception("Print succeeded but DB update failed")
         else:
-            log.warning("Label NOT printed (AUTO): %s", err)
+            log.warning("AUTO print failed: %s", err)
 
-    elif status == "PASS":
-        log.warning(
-            "Skipping print: qr_text=%s qr_image_path=%s",
-            qr_text,
-            qr_image_path,
-        )
-
-    # --------------------------------------------------
+    # ==================================================
     # SMS ALERT (FAIL ONLY)
-    # --------------------------------------------------
+    # ==================================================
     if status == "FAIL" and model_id:
         try:
             queue_sms_by_model(model_id, cycle)
-            log.warning("FAIL SMS queued")
-        except Exception as e:
-            log.error("Failed to queue FAIL SMS: %s", e)
+            log.warning(
+                "FAIL SMS queued | model=%s | weld_depth=%.2f",
+                model_id,
+                weld_depth,
+            )
+        except Exception:
+            log.exception("Failed to queue FAIL SMS")
 
     return cycle_id

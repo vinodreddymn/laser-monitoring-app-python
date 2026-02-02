@@ -1,4 +1,3 @@
-from logging import root
 from typing import Optional, List, Dict
 
 from PySide6.QtWidgets import (
@@ -29,8 +28,9 @@ from .activate_model_dialog import ActivateModelDialog
 
 class ModelsTab(QWidget):
     """
-    Models Management – Factory Floor Safe (Final)
+    Models Management – Factory Floor Safe
 
+    ✔ Touch Point supported
     ✔ Independent action buttons
     ✔ No layout nesting inside table cells
     ✔ No hover reliance
@@ -81,12 +81,13 @@ class ModelsTab(QWidget):
         root.addLayout(header)
 
         # ---------------- Table ----------------
-        self.table = QTableWidget(0, 7)
+        self.table = QTableWidget(0, 8)
         self.table.setObjectName("ModelsTable")
         self.table.setHorizontalHeaderLabels([
             "Model Name",
             "Type",
             "Tolerance (mm)",
+            "Touch Point",
             "Status",
             "Activate",
             "Edit",
@@ -100,37 +101,33 @@ class ModelsTab(QWidget):
         self.table.setShowGrid(False)
         self.table.setAlternatingRowColors(True)
 
-        # -------- Header setup --------
-        header = self.table.horizontalHeader()
-
-        header.setSectionResizeMode(0, QHeaderView.Fixed)    # Model Name
-        header.setSectionResizeMode(1, QHeaderView.Fixed)    # Type
-        header.setSectionResizeMode(2, QHeaderView.Stretch)  # ✅ FILL REMAINING SPACE
-        header.setSectionResizeMode(3, QHeaderView.Fixed)    # Status
-        header.setSectionResizeMode(4, QHeaderView.Fixed)    # Activate
-        header.setSectionResizeMode(5, QHeaderView.Fixed)    # Edit
-        header.setSectionResizeMode(6, QHeaderView.Fixed)    # Delete
+        # -------- Header behavior --------
+        header_view = self.table.horizontalHeader()
+        header_view.setSectionResizeMode(0, QHeaderView.Fixed)    # Model Name
+        header_view.setSectionResizeMode(1, QHeaderView.Fixed)    # Type
+        header_view.setSectionResizeMode(2, QHeaderView.Stretch)  # Tolerance
+        header_view.setSectionResizeMode(3, QHeaderView.Fixed)    # Touch Point
+        header_view.setSectionResizeMode(4, QHeaderView.Fixed)    # Status
+        header_view.setSectionResizeMode(5, QHeaderView.Fixed)    # Activate
+        header_view.setSectionResizeMode(6, QHeaderView.Fixed)    # Edit
+        header_view.setSectionResizeMode(7, QHeaderView.Fixed)    # Delete
 
         # -------- Column widths --------
-        self.table.setColumnWidth(0, 160)   # Model Name (10 chars)
-        self.table.setColumnWidth(1, 160)    # Type
-        self.table.setColumnWidth(3, 160)   # Status
-
-        self.table.setColumnWidth(4, 140)   # Activate
-        self.table.setColumnWidth(5, 140)   # Edit
-        self.table.setColumnWidth(6, 140)   # Delete
+        self.table.setColumnWidth(0, 160)
+        self.table.setColumnWidth(1, 120)
+        self.table.setColumnWidth(3, 140)
+        self.table.setColumnWidth(4, 140)
+        self.table.setColumnWidth(5, 140)
+        self.table.setColumnWidth(6, 140)
+        self.table.setColumnWidth(7, 140)
 
         # -------- Row height --------
-        self.table.verticalHeader().setDefaultSectionSize(56)
+        self.table.verticalHeader().setDefaultSectionSize(self.ROW_HEIGHT)
 
-        # -------- Text handling --------
         self.table.setWordWrap(False)
         self.table.setTextElideMode(Qt.ElideRight)
 
         root.addWidget(self.table, stretch=1)
-
-        self.setLayout(root)
-
 
     # ==================================================
     # DATA
@@ -163,60 +160,69 @@ class ModelsTab(QWidget):
     def _render_row(self, row: int, model: Dict):
         is_active = model["id"] == self.active_model_id
 
-        # Model Name
+        # ---- Model Name (0)
         name_item = QTableWidgetItem(model["name"])
         self._style_item(name_item, is_active)
         self.table.setItem(row, 0, name_item)
 
-        # Type
+        # ---- Type (1)
         type_item = QTableWidgetItem(model.get("model_type", "—"))
         type_item.setTextAlignment(Qt.AlignCenter)
         self._style_item(type_item, is_active)
         self.table.setItem(row, 1, type_item)
 
-        # Tolerance
+        # ---- Tolerance (2)
         tol_item = QTableWidgetItem(
             f"{model['lower_limit']:.2f} – {model['upper_limit']:.2f}"
         )
         self._style_item(tol_item, is_active)
         self.table.setItem(row, 2, tol_item)
 
-        # Status
-        status_item = QTableWidgetItem("ACTIVE" if is_active else "INACTIVE")
+        # ---- Touch Point (3)
+        tp_item = QTableWidgetItem(
+            f"{model.get('touch_point', 0.0):.2f}"
+        )
+        tp_item.setTextAlignment(Qt.AlignCenter)
+        self._style_item(tp_item, is_active)
+        self.table.setItem(row, 3, tp_item)
+
+        # ---- Status (4)
+        status_item = QTableWidgetItem(
+            "ACTIVE" if is_active else "INACTIVE"
+        )
         status_item.setTextAlignment(Qt.AlignCenter)
         status_item.setForeground(
             QColor("#22c55e") if is_active else QColor("#94a3b8")
         )
         if is_active:
             status_item.setFont(QFont("", weight=QFont.Bold))
+        self.table.setItem(row, 4, status_item)
 
-        self.table.setItem(row, 3, status_item)
-
-        # ---------- Activate ----------
+        # ---- Activate (5)
         btn_activate = QPushButton("Activate")
         btn_activate.setProperty("role", "success")
         btn_activate.setEnabled(not is_active)
         btn_activate.clicked.connect(
             lambda _, m=model: self._activate_model(m)
         )
-        self.table.setCellWidget(row, 4, btn_activate)
+        self.table.setCellWidget(row, 5, btn_activate)
 
-        # ---------- Edit ----------
+        # ---- Edit (6)
         btn_edit = QPushButton("Edit")
         btn_edit.setProperty("role", "secondary")
         btn_edit.clicked.connect(
             lambda _, m=model: self._edit_model(m)
         )
-        self.table.setCellWidget(row, 5, btn_edit)
+        self.table.setCellWidget(row, 6, btn_edit)
 
-        # ---------- Delete ----------
+        # ---- Delete (7)
         btn_delete = QPushButton("Delete")
         btn_delete.setProperty("role", "danger")
         btn_delete.setEnabled(not is_active)
         btn_delete.clicked.connect(
             lambda _, mid=model["id"]: self._delete_model(mid)
         )
-        self.table.setCellWidget(row, 6, btn_delete)
+        self.table.setCellWidget(row, 7, btn_delete)
 
     # ==================================================
     # ITEM STYLING

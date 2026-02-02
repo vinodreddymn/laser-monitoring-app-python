@@ -35,7 +35,7 @@ class ModelEditDialog(QDialog):
     """
 
     WIDTH = 900
-    HEIGHT = 700
+    HEIGHT = 760
 
     # --------------------------------------------------
     def __init__(self, parent=None, model: Optional[Dict] = None):
@@ -63,7 +63,6 @@ class ModelEditDialog(QDialog):
         title = QLabel(self.windowTitle())
         title.setObjectName("DialogTitle")
         title.setAlignment(Qt.AlignCenter)
-
         root.addWidget(title)
 
         divider = QFrame()
@@ -73,7 +72,7 @@ class ModelEditDialog(QDialog):
 
         # ---------------- Form ----------------
         form = QFormLayout()
-        form.setSpacing(16)
+        form.setSpacing(18)
         form.setLabelAlignment(Qt.AlignRight)
 
         # Model Name
@@ -88,9 +87,11 @@ class ModelEditDialog(QDialog):
         # Limits
         self.lower_edit = QLineEdit()
         self.upper_edit = QLineEdit()
+        self.touch_edit = QLineEdit()
 
         self.lower_edit.setPlaceholderText("Lower limit (mm)")
         self.upper_edit.setPlaceholderText("Upper limit (mm)")
+        self.touch_edit.setPlaceholderText("Touch point (mm)")
 
         # Populate if editing
         if self.model:
@@ -103,11 +104,14 @@ class ModelEditDialog(QDialog):
 
             self.lower_edit.setText(str(self.model.get("lower_limit", "")))
             self.upper_edit.setText(str(self.model.get("upper_limit", "")))
+            self.touch_edit.setText(str(self.model.get("touch_point", "")))
 
+        # Add rows
         form.addRow("Model Name", self.name_edit)
         form.addRow("Model Type", self.type_combo)
         form.addRow("Lower Limit (mm)", self.lower_edit)
         form.addRow("Upper Limit (mm)", self.upper_edit)
+        form.addRow("Touch Point (mm)", self.touch_edit)
 
         root.addLayout(form)
         root.addStretch()
@@ -149,11 +153,12 @@ class ModelEditDialog(QDialog):
         try:
             lower = float(self.lower_edit.text())
             upper = float(self.upper_edit.text())
+            touch = float(self.touch_edit.text())
         except ValueError:
             QMessageBox.critical(
                 self,
                 "Validation Error",
-                "Lower and upper limits must be valid numbers."
+                "Lower limit, upper limit and touch point must be valid numbers."
             )
             return
 
@@ -173,14 +178,16 @@ class ModelEditDialog(QDialog):
                     name,
                     model_type,
                     lower,
-                    upper
+                    upper,
+                    touch
                 )
             else:
                 add_model(
                     name,
                     model_type,
                     lower,
-                    upper
+                    upper,
+                    touch
                 )
         except Exception as exc:
             QMessageBox.critical(

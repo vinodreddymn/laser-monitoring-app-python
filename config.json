@@ -21,17 +21,17 @@
   },
   "qr_settings": {
     "qr_text_prefix": "G507",
-    "qr_start_counter": 100110,
-    "model_type": "RHD"
+    "qr_start_counter": 100214,
+    "model_type": "LHD"
   },
   "qr_visual": {
     "qr_fill_color": "#000000",
     "text_color": "#000000"
   },
   "purge_settings": {
-    "sms_sent_retention_hours": 1,
-    "qr_retention_hours": 1,
-    "cycles_retention_hours": 1
+    "sms_sent_retention_hours": 24,
+    "qr_retention_hours": 24,
+    "cycles_retention_hours": 24
   },
   "app_settings": {
     "settings_password": "admin123",

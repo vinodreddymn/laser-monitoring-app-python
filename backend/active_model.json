@@ -1,7 +1,8 @@
 {
-    "id": 18,
-    "name": "G507",
-    "model_type": "RHD",
-    "lower_limit": 5.0,
-    "upper_limit": 10.0
+    "id": 20,
+    "name": "G675",
+    "model_type": "LHD",
+    "lower_limit": 1.09,
+    "upper_limit": 6.78,
+    "touch_point": 45.0
 }

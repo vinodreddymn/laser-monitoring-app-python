@@ -16,7 +16,8 @@ ACTIVE_MODEL_FILE = os.path.join(os.path.dirname(__file__), "active_model.json")
 def get_models() -> list:
     """
     Returns all models ordered by name.
-    Includes: id, name, model_type, lower_limit, upper_limit
+    Includes:
+    id, name, model_type, lower_limit, upper_limit, touch_point
     """
     return query("SELECT * FROM models ORDER BY name")
 
@@ -36,7 +37,8 @@ def add_model(
     name: str,
     model_type: str,
     lower_limit: float,
-    upper_limit: float
+    upper_limit: float,
+    touch_point: float
 ) -> int:
     """
     Add a new model.
@@ -44,12 +46,17 @@ def add_model(
     """
     result = query(
         """
-        INSERT INTO models (name, model_type, lower_limit, upper_limit)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO models
+            (name, model_type, lower_limit, upper_limit, touch_point)
+        VALUES (%s, %s, %s, %s, %s)
         """,
-        (name, model_type, lower_limit, upper_limit)
+        (name, model_type, lower_limit, upper_limit, touch_point)
     )
-    log.info("Added model: %s (%s) limits %.2f-%.2f", name, model_type, lower_limit, upper_limit)
+
+    log.info(
+        "Added model: %s (%s) limits %.2f-%.2f touch_point=%.2f",
+        name, model_type, lower_limit, upper_limit, touch_point
+    )
     return result
 
 
@@ -58,7 +65,8 @@ def update_model(
     name: str,
     model_type: str,
     lower_limit: float,
-    upper_limit: float
+    upper_limit: float,
+    touch_point: float
 ) -> int:
     """
     Update an existing model.
@@ -69,12 +77,17 @@ def update_model(
         SET name = %s,
             model_type = %s,
             lower_limit = %s,
-            upper_limit = %s
+            upper_limit = %s,
+            touch_point = %s
         WHERE id = %s
         """,
-        (name, model_type, lower_limit, upper_limit, model_id)
+        (name, model_type, lower_limit, upper_limit, touch_point, model_id)
     )
-    log.info("Updated model %s: %s (%s) limits %.2f-%.2f", model_id, name, model_type, lower_limit, upper_limit)
+
+    log.info(
+        "Updated model %s: %s (%s) limits %.2f-%.2f touch_point=%.2f",
+        model_id, name, model_type, lower_limit, upper_limit, touch_point
+    )
     return result
 
 
@@ -106,7 +119,7 @@ def set_active_model(model_id: int):
         (model_id,)
     )
 
-    # Fetch full model details (now includes model_type)
+    # Fetch full model details (includes touch_point)
     model = get_model_by_id(model_id)
     if not model:
         return

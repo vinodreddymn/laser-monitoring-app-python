@@ -1,3 +1,5 @@
+# gui/widgets/plot_panel.py
+
 import time
 import logging
 from typing import List, Tuple
@@ -9,9 +11,7 @@ except ImportError:
     HAS_NUMPY = False
 
 import pyqtgraph as pg
-from PySide6.QtWidgets import (
-    QFrame, QVBoxLayout, QLabel, QGraphicsPixmapItem
-)
+from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel, QGraphicsPixmapItem
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QPixmap
 
@@ -23,18 +23,16 @@ class PlotPanel(QFrame):
     Industrial Welding Laser Plot (Clarity-First)
 
     ✔ Raw laser waveform
-    ✔ Large PASS / FAIL + depth annotation (no vertical overlays)
-    ✔ Left-aligned cycle labels on waveform
-    ✔ Overlays move with time axis
-    ✔ Branding watermark always visible
-    ✔ Clean supervisor badge
+    ✔ Touch-point reference line
+    ✔ Live laser value badge
+    ✔ PASS / FAIL cycle annotations
+    ✔ Branding watermark
     """
-
 
     TIME_WINDOW_SEC = 60
     MAX_POINTS = 900
     UPDATE_INTERVAL_MS = 100
-    MAX_CYCLE_OVERLAYS = 6   # keep display clean
+    MAX_CYCLE_OVERLAYS = 6
 
     # --------------------------------------------------
     def __init__(self, parent=None):
@@ -42,12 +40,17 @@ class PlotPanel(QFrame):
 
         # ---------------- Live Data ----------------
         self.data: List[Tuple[float, float]] = []
+        self.latest_value: float | None = None
 
         # ---------------- Model Info ----------------
         self.model_name = ""
         self.model_type = ""
         self.lower_limit = 0.0
         self.upper_limit = 0.0
+        self.touch_point: float | None = None
+
+        # ---------------- Touch Point Line ----------------
+        self._touch_line: pg.InfiniteLine | None = None
 
         # ---------------- Cycle Overlays ----------------
         self._cycle_overlays = []
@@ -103,7 +106,7 @@ class PlotPanel(QFrame):
         # ---------------- Badge ----------------
         self.badge = QLabel("")
         self.badge.setAlignment(Qt.AlignCenter)
-        self.badge.setFont(QFont("Segoe UI", 20, QFont.Bold))
+        self.badge.setFont(QFont("Segoe UI", 18, QFont.Bold))
         self.badge.setStyleSheet("""
             QLabel {
                 background:#0f1622;
@@ -120,70 +123,101 @@ class PlotPanel(QFrame):
     # ==================================================
     # PUBLIC API
     # ==================================================
-    def set_model_info(self, name, model_type, lower, upper):
+    def set_model_info(self, name, model_type, lower, upper, touch_point):
         self.model_name = name
         self.model_type = model_type
         self.lower_limit = lower
         self.upper_limit = upper
+        self.touch_point = touch_point
+
+        self._install_touch_line()
         self._update_badge()
 
     def append_value(self, value: float):
-        self.data.append((time.time(), float(value)))
+        self.latest_value = float(value)
+        self.data.append((time.time(), self.latest_value))
         self._trim_data()
         self._schedule_update()
 
-    def update_cycle_result(self, cycle: dict):
-        """
-        One annotation per cycle.
-        Big, bold, left-aligned text placed on waveform.
-        """
-
-        ts = time.time()
-        depth = cycle["weld_depth"]
-        status = cycle["pass_fail"]
-
-        text_color = "#22c55e" if status == "PASS" else "#ef4444"
-
-        label = pg.TextItem(
-            html=(
-                "<div style='text-align:left; padding-left:6px;'>"
-                f"<span style='font-size:34px; font-weight:900; color:{text_color};'>"
-                f"{status}</span><br>"
-                f"<span style='font-size:26px; font-weight:700; color:#e6edf3;'>"
-                f"{depth:.2f} mm</span>"
-                "</div>"
-            ),
-            anchor=(0, 0)  # left aligned
-        )
-
-        label.setZValue(50)
-        self.plot.addItem(label)
-
-        self._cycle_overlays.append({
-            "ts": ts,
-            "label": label
-        })
-
-        # Keep display clean
-        if len(self._cycle_overlays) > self.MAX_CYCLE_OVERLAYS:
-            old = self._cycle_overlays.pop(0)
-            self.plot.removeItem(old["label"])
-
     def reset(self):
         self.data.clear()
+        self.latest_value = None
         self.curve.clear()
         self._clear_overlays()
+        self._remove_touch_line()
         self._update_badge()
+
+    def show_no_data(self):
+        self.curve.clear()
+        self.badge.setText("NO DATA")
+
+    # ==================================================
+    # TOUCH POINT LINE
+    # ==================================================
+    def _install_touch_line(self):
+        self._remove_touch_line()
+
+        if self.touch_point is None:
+            return
+
+        self._touch_line = pg.InfiniteLine(
+            pos=self.touch_point,
+            angle=0,
+            pen=pg.mkPen("#f59e0b", width=2, style=Qt.DashLine)
+        )
+        self._touch_line.setZValue(20)
+        self.plot.addItem(self._touch_line)
+
+    def _remove_touch_line(self):
+        if self._touch_line:
+            self.plot.removeItem(self._touch_line)
+            self._touch_line = None
+
+    # ==================================================
+    # CYCLE ANNOTATION (CALLED BY MainWindow)
+    # ==================================================
+    def update_cycle_result(self, cycle: dict):
+        """
+        Annotate completed cycle on the plot.
+        """
+        try:
+            ts = time.time()
+
+            result = cycle.get("pass_fail", "UNKNOWN")
+            weld_depth = float(cycle.get("weld_depth", 0.0))
+
+            color = "#00ffaa" if result == "PASS" else "#ff4444"
+
+            label = pg.TextItem(
+                html=(
+                    f"<div style='text-align:center;'>"
+                    f"<span style='font-size:22px; font-weight:bold; color:{color};'>"
+                    f"{result}</span><br>"
+                    f"<span style='font-size:18px; color:#e6edf3;'>"
+                    f"{weld_depth:.2f} mm</span>"
+                    f"</div>"
+                ),
+                anchor=(0.5, 1.0)
+            )
+
+            label.setZValue(30)
+            self.plot.addItem(label)
+
+            self._cycle_overlays.append({
+                "ts": ts,
+                "label": label,
+            })
+
+            if len(self._cycle_overlays) > self.MAX_CYCLE_OVERLAYS:
+                old = self._cycle_overlays.pop(0)
+                self.plot.removeItem(old["label"])
+
+        except Exception:
+            log.exception("Failed to update cycle overlay")
 
     # ==================================================
     # INTERNALS
     # ==================================================
-    def _clear_overlays(self):
-        for c in self._cycle_overlays:
-            self.plot.removeItem(c["label"])
-        self._cycle_overlays.clear()
-
-
     def _update_plot(self):
         if not self.data:
             return
@@ -201,27 +235,44 @@ class PlotPanel(QFrame):
 
         ymin, ymax = min(values), max(values)
         pad = max((ymax - ymin) * 0.3, 1.0)
+
+        if self.touch_point is not None:
+            ymin = min(ymin, self.touch_point)
+            ymax = max(ymax, self.touch_point)
+
         self.plot.setYRange(ymin - pad, ymax + pad)
 
-        # Move overlays with time
         for c in self._cycle_overlays:
             dx = c["ts"] - t0
-
-            # Slightly below top of waveform
             y_pos = ymax - (ymax - ymin) * 0.15
-
             c["label"].setPos(dx + 0.2, y_pos)
 
+        self._update_badge()
 
     def _update_badge(self):
         if not self.model_name:
             self.badge.setText("")
             return
 
-        self.badge.setText(
-            f"{self.model_name}  |  {self.model_type}  |  "
-            f"Weld Depth Limits: {self.lower_limit:.1f} – {self.upper_limit:.1f} mm"
+        live = (
+            f"{self.latest_value:.2f} mm"
+            if self.latest_value is not None else "—"
         )
+
+        self.badge.setText(
+            f"{self.model_name} | {self.model_type} | "
+            f"Limits: {self.lower_limit:.1f} – {self.upper_limit:.1f} mm | "
+            f"Touch: {self.touch_point:.2f} mm | "
+            f"Live: {live}"
+        )
+
+    def _clear_overlays(self):
+        for c in self._cycle_overlays:
+            self.plot.removeItem(c["label"])
+        self._cycle_overlays.clear()
+
+    def reset_cycle_markers(self):
+        self._clear_overlays()
 
     def _trim_data(self):
         cutoff = time.time() - self.TIME_WINDOW_SEC
@@ -264,11 +315,3 @@ class PlotPanel(QFrame):
 
         update()
         view.sigResized.connect(update)
-
-    def reset_cycle_markers(self):
-        """
-        Backward-compatible API.
-        Clears all cycle annotations from the plot.
-        """
-        self._clear_overlays()
-
